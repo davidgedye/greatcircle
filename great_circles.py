@@ -53,7 +53,7 @@ def load_water_mask(path: str) -> tuple[np.ndarray, dict]:
         # GMT grids are stored row-major from top (lat_max) to bottom (lat_min)
         elevation = z_flat.reshape(nlat, nlon)
         del z_flat
-        is_water = (elevation <= 0).astype(np.float32)
+        is_water = (elevation <= 0).astype(np.int8)
         del elevation
         # Flip to ascending lat order
         is_water = is_water[::-1, :]
@@ -70,17 +70,24 @@ def load_water_mask(path: str) -> tuple[np.ndarray, dict]:
 
         lats = ds.variables[lat_var][:]
         lons = ds.variables[lon_var][:]
+        nlat, nlon = len(lats), len(lons)
         print(f"  Elevation variable: '{elev_var}'")
-        print(f"  Lat range: {lats[0]:.2f} to {lats[-1]:.2f}  (n={len(lats)})")
-        print(f"  Lon range: {lons[0]:.2f} to {lons[-1]:.2f}  (n={len(lons)})")
+        print(f"  Lat range: {lats[0]:.2f} to {lats[-1]:.2f}  (n={nlat})")
+        print(f"  Lon range: {lons[0]:.2f} to {lons[-1]:.2f}  (n={nlon})")
 
-        print("  Reading elevation array ...")
-        elevation = ds.variables[elev_var][:]
+        # Read elevation in row-chunks to avoid holding the full array in RAM
+        # alongside the mask (GEBCO int16 = ~7.5 GB; int8 mask = ~3.7 GB).
+        chunk_rows = 1000
+        print(f"  Building water mask in chunks of {chunk_rows} rows ...")
+        is_water = np.empty((nlat, nlon), dtype=np.int8)
+        elev_var_nc = ds.variables[elev_var]
+        for i in range(0, nlat, chunk_rows):
+            j = min(i + chunk_rows, nlat)
+            is_water[i:j, :] = (elev_var_nc[i:j, :] <= 0).astype(np.int8)
+            if (i // chunk_rows) % 10 == 0:
+                print(f"    {j}/{nlat} rows ...", flush=True)
         ds.close()
 
-        is_water = (elevation <= 0).astype(np.float32)
-        del elevation
-        nlat, nlon = is_water.shape
         lat_min, lat_max = float(lats[0]), float(lats[-1])
         lon_min, lon_max = float(lons[0]), float(lons[-1])
         dlat = float(lats[1] - lats[0])
@@ -425,18 +432,30 @@ def main():
     report(results, "WETTEST GREAT CIRCLES (coarse)", top_n=args.top)
     report(list(reversed(results)), "DRIEST GREAT CIRCLES (coarse)", top_n=args.top)
 
+    import json as _json
+
+    def _deg(rad_results):
+        return [[round(np.degrees(t), 4), round(np.degrees(p), 4), round(f, 5)]
+                for f, t, p in rad_results]
+
+    output = {
+        "wettest": {"coarse": _deg(results[:10])},
+        "driest":  {"coarse": _deg(reversed(results[-10:]))},
+    }
+
     if not args.no_fine:
         top_wet = results[:10]
         top_dry = results[-10:]
-        fine_wet, grids_wet = fine_search(mask, grid, top_wet, minimize=False, workers=args.workers)
-        fine_dry, grids_dry = fine_search(mask, grid, top_dry, minimize=True,  workers=args.workers)
+        fine_wet, grids_wet = fine_search(mask, grid, top_wet, minimize=False, n_pts=args.pts, workers=args.workers)
+        fine_dry, grids_dry = fine_search(mask, grid, top_dry, minimize=True,  n_pts=args.pts, workers=args.workers)
         report(fine_wet, "WETTEST GREAT CIRCLES (fine)", top_n=5)
         report(fine_dry, "DRIEST GREAT CIRCLES (fine)", top_n=5)
+        output["wettest"]["fine"] = grids_wet
+        output["driest"]["fine"]  = grids_dry
 
-        import json as _json
-        with open("fine_grids.json", "w") as f:
-            _json.dump({"wettest": grids_wet, "driest": grids_dry}, f)
-        print("\nFine search grids saved to fine_grids.json")
+    with open("results.json", "w") as f:
+        _json.dump(output, f)
+    print("\nResults saved to results.json")
 
 
 if __name__ == "__main__":

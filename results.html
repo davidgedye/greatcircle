@@ -365,13 +365,13 @@ const map = new mapboxgl.Map({
   container: 'map',
   style: 'mapbox://styles/mapbox/satellite-streets-v12',
   projection: 'globe',
-  center: [142, 0],
+  center: [129, 0],
   zoom: 2.5,
 });
 // Shift the camera so [142,0] is centred in the area left of the panel.
 // jumpTo sets internal state before the first render frame — no visible jump.
 const _initPad = (document.getElementById('panel').offsetWidth || 240) + 20;
-map.jumpTo({ center:[142,0], zoom:2.5,
+map.jumpTo({ center:[129,0], zoom:2.5,
               padding:{top:0,bottom:0,left:0,right:_initPad} });
 map.addControl(new mapboxgl.NavigationControl(), 'top-left');
 
@@ -583,7 +583,7 @@ map.on('style.load', () => {
   if (dataReady) setupMapLayers();
 });
 
-fetch('data.json')
+fetch('visuals.json')
   .then(r => r.json())
   .then(d => {
     DATA       = d.layers;
@@ -593,7 +593,7 @@ fetch('data.json')
     if (styleReady) setupMapLayers();
     initHeatmaps();
   })
-  .catch(err => console.error('Failed to load data.json:', err));
+  .catch(err => console.error('Failed to load visuals.json:', err));
 </script>
 </body>
 </html>

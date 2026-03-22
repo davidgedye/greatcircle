@@ -1,49 +1,31 @@
 """
-visualize.py — Generate results.html: an interactive 3D globe showing great circle results.
+visualize.py — Read results.json and write data.json for the interactive globe.
+
+Usage:
+    python3 visualize.py
 """
 
 import json
 import numpy as np
 
-from config import MAPBOX_TOKEN
 
-# ---------- Results from the search run ----------
+# ---------- Load results from results.json ----------
 
-WETTEST_COARSE = [
-    (65.932, 79.0,  0.9150),
-    (32.480, 47.0,  0.9114),
-    (31.268, 48.0,  0.9097),
-    (31.268, 47.0,  0.9083),
-    (140.945, 175.0, 0.9081),
-    (30.012, 49.0,  0.9078),
-    (32.480, 46.0,  0.9075),
-    (32.480, 48.0,  0.9075),
-    (95.450, 66.0,  0.9064),
-    (95.450, 65.0,  0.9061),
-]
-WETTEST_FINE = [
-    (65.856, 79.127, 0.9161),
-]
+def load_results():
+    import os, sys
+    if not os.path.exists('results.json'):
+        print('ERROR: results.json not found — run great_circles.py first.')
+        sys.exit(1)
+    with open('results.json') as f:
+        return json.load(f)
 
-DRIEST_COARSE = [
-    (96.737, 25.0,  0.4281),
-    (96.093, 26.0,  0.4292),
-    (93.523, 26.0,  0.4303),
-    (93.523, 25.0,  0.4314),
-    (95.450, 26.0,  0.4325),
-    (96.737, 26.0,  0.4328),
-    (92.882, 25.0,  0.4336),
-    (92.882, 24.0,  0.4339),
-    (96.737, 27.0,  0.4339),
-    (96.093, 25.0,  0.4342),
-]
-DRIEST_FINE = [
-    (96.538, 25.266, 0.4228),
-    (96.473, 25.165, 0.4228),
-    (96.510, 25.177, 0.4231),
-    (93.397, 25.886, 0.4233),
-    (93.397, 25.873, 0.4233),
-]
+
+def best_fine_result(grid_info):
+    """Extract (theta_deg, phi_deg, frac) for the best point in a fine grid entry."""
+    g = grid_info
+    theta = g['theta_center_deg'] + g['offsets_deg'][g['best_i']]
+    phi   = g['phi_center_deg']   + g['offsets_deg'][g['best_j']]
+    return (round(theta, 4), round(phi, 4), g['best_frac'])
 
 
 # ---------- Geometry ----------
@@ -102,15 +84,15 @@ def make_geojson(circles, rank_label, invert=False):
     return {'type': 'FeatureCollection', 'features': features}
 
 
-# ---------- HTML ----------
+# ---------- Data ----------
 
-def load_fine_grids():
-    import os
-    if not os.path.exists('fine_grids.json'):
+def fine_grids_from_results(results):
+    """Extract the best fine grid for each category, for heatmap rendering."""
+    wet = results.get('wettest', {}).get('fine')
+    dry = results.get('driest',  {}).get('fine')
+    if not wet or not dry:
         return None
-    with open('fine_grids.json') as f:
-        data = json.load(f)
-    return {'wettest': data['wettest'][0], 'driest': data['driest'][0]}
+    return {'wettest': wet[0], 'driest': dry[0]}
 
 
 def write_data_json(layers, fine_grids):
@@ -119,651 +101,63 @@ def write_data_json(layers, fine_grids):
         'layer_meta': [{k: v for k, v in l.items() if k != 'geojson'} for l in layers],
         'fine_grids': fine_grids,
     }
-    with open('data.json', 'w') as f:
+    with open('visuals.json', 'w') as f:
         json.dump(payload, f, separators=(',', ':'))
-    print(f'Written to data.json ({len(json.dumps(payload, separators=(",", ":"))) // 1024} KB)')
-
-
-def generate_html():
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Great Circles — Wettest &amp; Driest</title>
-<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
-<link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
-<script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ background: #000; font-family: 'Courier New', monospace; }}
-  #map {{ position: absolute; inset: 0; }}
-
-  #panel {{
-    position: absolute; top: 16px; right: 16px;
-    background: rgba(8,8,8,0.82); border: 1px solid #2a2a2a;
-    border-radius: 8px; padding: 14px 16px; color: #ccc;
-    font-size: 12px; min-width: 240px;
-    backdrop-filter: blur(6px);
-  }}
-  #panel h3 {{
-    font-size: 11px; color: #888; margin-bottom: 10px; letter-spacing: 2px;
-    border-bottom: 1px solid #2a2a2a; padding-bottom: 7px;
-    cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center;
-  }}
-  #panel h3:hover {{ color: #ccc; }}
-  #style-switcher {{
-    display: flex; align-items: center;
-    margin-bottom: 10px; border-bottom: 1px solid #2a2a2a; padding-bottom: 10px;
-  }}
-  #style-switcher select {{
-    flex: 1; background: #1a1a1a; color: #ccc; border: 1px solid #333;
-    border-radius: 4px; padding: 4px 6px; font-size: 12px; font-family: inherit; cursor: pointer;
-  }}
-  #panel-chevron {{ font-size: 33px; line-height: 1; }}
-  #panel-body {{ overflow: hidden; transition: max-height 0.25s ease, opacity 0.25s ease; }}
-  #panel-body.collapsed {{ max-height: 0 !important; opacity: 0; }}
-  .row {{ display: flex; align-items: center; margin: 6px 0; gap: 8px; cursor: pointer; }}
-  .row input {{ cursor: pointer; margin: 0; accent-color: #aaa; }}
-  .swatch {{ width: 26px; height: 3px; border-radius: 1px; flex-shrink: 0; }}
-  .swatch.dashed {{
-    background: repeating-linear-gradient(90deg,
-      var(--c) 0 5px, transparent 5px 9px) !important;
-  }}
-  .row label {{ cursor: pointer; line-height: 1.4; }}
-
-  #tooltip {{
-    position: absolute; bottom: 22px; left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.85); border: 1px solid #333;
-    color: #eee; font-size: 12px; padding: 7px 14px;
-    border-radius: 5px; pointer-events: none;
-    opacity: 0; transition: opacity 0.15s; white-space: nowrap;
-  }}
-  #tooltip.on {{ opacity: 1; }}
-
-  #click-result {{
-    position: absolute; bottom: 58px; left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.88); border: 1px solid #555;
-    color: #eee; font-size: 12px; font-family: monospace;
-    padding: 7px 16px; border-radius: 5px;
-    pointer-events: none; display: none; white-space: nowrap;
-  }}
-
-  #heatmaps {{
-    margin-top: 12px; border-top: 1px solid #2a2a2a; padding-top: 10px;
-  }}
-  #heatmaps h4 {{
-    font-size: 10px; color: #888; letter-spacing: 2px; margin-bottom: 8px;
-  }}
-  .hm-pair {{
-    display: flex; flex-direction: column; gap: 10px; align-items: center;
-  }}
-  .hm-block {{
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-  }}
-  .hm-label {{
-    font-size: 10px; color: #999; letter-spacing: 1px;
-  }}
-  .hm-pct {{
-    font-size: 11px; font-weight: bold;
-  }}
-  canvas.heatmap {{
-    image-rendering: pixelated;
-    border: 1px solid #333; border-radius: 2px;
-    cursor: crosshair;
-  }}
-</style>
-</head>
-<body>
-<div id="map"></div>
-<div id="panel">
-  <h3 id="panel-title">GREAT CIRCLES <span id="panel-chevron">▾</span></h3>
-  <div id="panel-body">
-  <div id="style-switcher"><span style="font-size:10px;color:#888;letter-spacing:2px;margin-right:8px;">MAP</span></div>
-  <div id="toggles"></div>
-  <div id="heatmaps" style="display:none">
-    <h4>FINE SEARCH SURFACE</h4>
-    <div class="hm-pair">
-      <div class="hm-block">
-        <div class="hm-label">WETTEST</div>
-        <canvas class="heatmap" id="hm-wet" width="220" height="220"></canvas>
-        <div class="hm-pct" id="hm-wet-pct" style="color:#00e5ff"></div>
-      </div>
-      <div class="hm-block">
-        <div class="hm-label">DRIEST</div>
-        <canvas class="heatmap" id="hm-dry" width="220" height="220"></canvas>
-        <div class="hm-pct" id="hm-dry-pct" style="color:#ff1744"></div>
-      </div>
-    </div>
-  </div>
-  </div>
-</div>
-<div id="tooltip"></div>
-<div id="click-result"></div>
-
-<script>
-let DATA, LAYERS, FINE_GRIDS;
-
-// --- Heatmap rendering ---
-function heatColor(t) {{
-  // t=0 → red (dry), t=1 → blue (wet), returns [r, g, b]
-  const r = Math.round(255 * (1 - t) * (t < 0.5 ? 1 : 2 * (1 - t)));
-  const g = Math.round(255 * Math.min(2 * t, 2 * (1 - t)) * 0.5);
-  const b = Math.round(255 * t * (t > 0.5 ? 1 : 2 * t));
-  return [r, g, b];
-}}
-
-function drawHeatmap(canvasId, data, highlight=null) {{
-  const canvas = document.getElementById(canvasId);
-  const ctx = canvas.getContext('2d');
-  const n = data.grid.length;
-
-  let min = Infinity, max = -Infinity;
-  data.grid.forEach(row => row.forEach(v => {{ min = Math.min(min, v); max = Math.max(max, v); }}));
-  const range = max - min || 1;
-
-  const off = document.createElement('canvas');
-  off.width = n; off.height = n;
-  const octx = off.getContext('2d');
-  const img = octx.createImageData(n, n);
-  for (let i = 0; i < n; i++) {{
-    for (let j = 0; j < n; j++) {{
-      const t = (data.grid[i][j] - min) / range;
-      const c = heatColor(t);
-      const idx = (i * n + j) * 4;
-      img.data[idx]=c[0]; img.data[idx+1]=c[1]; img.data[idx+2]=c[2]; img.data[idx+3]=255;
-    }}
-  }}
-  octx.putImageData(img, 0, 0);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
-
-  const pw = canvas.width / n, ph = canvas.height / n;
-
-  function drawCrosshair(i_f, j_f, color) {{
-    const cx = (j_f + 0.5) * pw, cy = (i_f + 0.5) * ph;
-    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
-    const r = pw * 2;
-    ctx.beginPath(); ctx.moveTo(cx-r,cy); ctx.lineTo(cx+r,cy); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx,cy-r); ctx.lineTo(cx,cy+r); ctx.stroke();
-  }}
-
-  drawCrosshair(data.best_i, data.best_j, '#fff');
-  if (highlight !== null) drawCrosshair(highlight.i_f, highlight.j_f, highlight.color || '#ffff00');
-}}
-
-function initHeatmap(canvasId, pctId, data, key, color, invert=false) {{
-  const canvas = document.getElementById(canvasId);
-  const pct    = document.getElementById(pctId);
-  const n      = data.grid.length;
-  const fmt = v => invert
-    ? ((1-v)*100).toFixed(2) + '% land'
-    : (v*100).toFixed(2) + '% ocean';
-  const best = fmt(data.best_frac) + ' (best)';
-  pct.textContent = best;
-
-  canvas.addEventListener('mousemove', e => {{
-    const rect = canvas.getBoundingClientRect();
-    const j = Math.floor((e.clientX - rect.left) / rect.width  * n);
-    const i = Math.floor((e.clientY - rect.top)  / rect.height * n);
-    if (i >= 0 && i < n && j >= 0 && j < n) {{
-      const val  = data.grid[i][j];
-      const tDeg = data.theta_center_deg + data.offsets_deg[i];
-      const pDeg = data.phi_center_deg   + data.offsets_deg[j];
-      pct.textContent = fmt(val) + `  (${{poleStr(tDeg, pDeg)}})`;
-    }}
-  }});
-  canvas.addEventListener('mouseleave', () => {{ pct.textContent = best; }});
-
-  canvas.addEventListener('click', e => {{
-    const rect = canvas.getBoundingClientRect();
-    const j = Math.floor((e.clientX - rect.left) / rect.width  * n);
-    const i = Math.floor((e.clientY - rect.top)  / rect.height * n);
-    if (i < 0 || i >= n || j < 0 || j >= n) return;
-
-    const tDeg = data.theta_center_deg + data.offsets_deg[i];
-    const pDeg = data.phi_center_deg   + data.offsets_deg[j];
-    const nVec = thetaPhiToNormal(tDeg, pDeg);
-    const frac = data.grid[i][j];
-
-    if (map.getSource('perturbed')) {{
-      map.getSource('perturbed').setData({{
-        type:'FeatureCollection',
-        features:[{{
-          type:'Feature', properties:{{color}},
-          geometry:{{type:'LineString', coordinates:gcCoords(nVec)}}
-        }}]
-      }});
-    }}
-    clickResult.textContent = `${{key}}: ${{fmt(frac)}}  ·  ${{poleStr(tDeg, pDeg)}}`;
-    clickResult.style.display = 'block';
-
-    drawHeatmap(canvasId, data, {{i_f: i, j_f: j, color}});
-    const otherCanvas = canvasId === 'hm-wet' ? 'hm-dry' : 'hm-wet';
-    const otherData   = FINE_GRIDS[key === 'wettest' ? 'driest' : 'wettest'];
-    drawHeatmap(otherCanvas, otherData, null);
-  }});
-}}
-
-function initHeatmaps() {{
-  if (!FINE_GRIDS) return;
-  document.getElementById('heatmaps').style.display = 'block';
-  drawHeatmap('hm-wet', FINE_GRIDS.wettest);
-  drawHeatmap('hm-dry', FINE_GRIDS.driest);
-  initHeatmap('hm-wet', 'hm-wet-pct', FINE_GRIDS.wettest, 'wettest', '#00e5ff', false);
-  initHeatmap('hm-dry', 'hm-dry-pct', FINE_GRIDS.driest,  'driest',  '#ff1744', true);
-}}
-
-function swatchHtml(color, dashed) {{
-  const bg = dashed
-    ? `repeating-linear-gradient(90deg,${{color}} 0 5px,transparent 5px 9px)`
-    : color;
-  return `<span style="display:inline-block;width:22px;height:3px;background:${{bg}};`
-       + `vertical-align:middle;border-radius:1px;margin:0 5px 1px 0"></span>`;
-}}
-
-function poleStr(tDeg, pDeg) {{
-  const lat = 90 - tDeg;
-  const latS = Math.abs(lat).toFixed(2) + (lat >= 0 ? '°N' : '°S');
-  const lonS = pDeg.toFixed(2) + '°E';
-  return `pole ${{latS}} ${{lonS}}`;
-}}
-
-// ---------- Vector helpers ----------
-const dot  = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
-const vscale = (v,s) => v.map(x=>x*s);
-const vsub   = (a,b) => a.map((x,i)=>x-b[i]);
-const vnorm  = v => {{ const m=Math.sqrt(dot(v,v)); return v.map(x=>x/m); }};
-const vcross = (a,b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
-
-function latlonToCart(latDeg, lonDeg) {{
-  const la=latDeg*Math.PI/180, lo=lonDeg*Math.PI/180;
-  return [Math.cos(la)*Math.cos(lo), Math.cos(la)*Math.sin(lo), Math.sin(la)];
-}}
-
-function thetaPhiToNormal(tDeg, pDeg) {{
-  const t=tDeg*Math.PI/180, p=pDeg*Math.PI/180;
-  return [Math.sin(t)*Math.cos(p), Math.sin(t)*Math.sin(p), Math.cos(t)];
-}}
-
-function normalToThetaPhi(n) {{
-  let theta = Math.acos(Math.max(-1,Math.min(1,n[2])))*180/Math.PI;
-  let phi   = Math.atan2(n[1],n[0])*180/Math.PI;
-  if (phi < 0) phi += 360;
-  if (phi >= 180) {{ phi -= 180; theta = 180 - theta; }}
-  return [theta, phi];
-}}
-
-function perturbNormal(n0, p) {{
-  // Great circle nearest to n0 that passes through point p
-  const proj = vsub(n0, vscale(p, dot(n0, p)));
-  return dot(proj,proj) < 1e-12 ? null : vnorm(proj);
-}}
-
-function gcCoords(n, nPts=360) {{
-  const ref = Math.abs(n[0]) < 0.9 ? [1,0,0] : [0,1,0];
-  const u = vnorm(vcross(n, ref));
-  const v = vcross(n, u);
-  const raw = [];
-  for (let i=0; i<nPts; i++) {{
-    const t = 2*Math.PI*i/nPts;
-    const px=Math.cos(t)*u[0]+Math.sin(t)*v[0];
-    const py=Math.cos(t)*u[1]+Math.sin(t)*v[1];
-    const pz=Math.cos(t)*u[2]+Math.sin(t)*v[2];
-    raw.push([Math.atan2(py,px)*180/Math.PI,
-              Math.asin(Math.max(-1,Math.min(1,pz)))*180/Math.PI]);
-  }}
-  raw.push(raw[0]);
-  // Unwrap longitude
-  const out=[raw[0]];
-  for (let i=1;i<raw.length;i++) {{
-    let lon=raw[i][0];
-    const d=lon-out[out.length-1][0];
-    if (d>180) lon-=360; else if (d<-180) lon+=360;
-    out.push([lon,raw[i][1]]);
-  }}
-  return out;
-}}
-
-function gridCoords(gd, thetaDeg, phiDeg) {{
-  const offs=gd.offsets_deg, n=offs.length;
-  const range=offs[n-1]-offs[0];
-  const i_f=(thetaDeg-gd.theta_center_deg-offs[0])/range*(n-1);
-  const j_f=(phiDeg  -gd.phi_center_deg  -offs[0])/range*(n-1);
-  if (i_f<0||i_f>n-1||j_f<0||j_f>n-1) return null;
-  return {{i_f, j_f}};
-}}
-
-function interpGrid(gd, thetaDeg, phiDeg) {{
-  const offs=gd.offsets_deg, n=offs.length;
-  const dT=thetaDeg-gd.theta_center_deg, dP=phiDeg-gd.phi_center_deg;
-  const range=offs[n-1]-offs[0];
-  const i_f=(dT-offs[0])/range*(n-1);
-  const j_f=(dP-offs[0])/range*(n-1);
-  if (i_f<0||i_f>n-1||j_f<0||j_f>n-1) return null;
-  const i0=Math.floor(i_f), j0=Math.floor(j_f);
-  const i1=Math.min(i0+1,n-1), j1=Math.min(j0+1,n-1);
-  const di=i_f-i0, dj=j_f-j0;
-  return gd.grid[i0][j0]*(1-di)*(1-dj)+gd.grid[i0][j1]*(1-di)*dj
-        +gd.grid[i1][j0]*di*(1-dj)    +gd.grid[i1][j1]*di*dj;
-}}
-
-// ---------- Style switcher
-const STYLES = [
-  {{ label: 'Satellite',         url: 'mapbox://styles/mapbox/satellite-v9' }},
-  {{ label: 'Satellite + roads', url: 'mapbox://styles/mapbox/satellite-streets-v12' }},
-  {{ label: 'Dark',              url: 'mapbox://styles/mapbox/dark-v11' }},
-  {{ label: 'Outdoors',          url: 'mapbox://styles/mapbox/outdoors-v12' }},
-  {{ label: 'Light',             url: 'mapbox://styles/mapbox/light-v11' }},
-];
-const currentStyle = 'mapbox://styles/mapbox/satellite-streets-v12';
-const sel = document.createElement('select');
-STYLES.forEach(s => {{
-  const opt = document.createElement('option');
-  opt.value = s.url; opt.textContent = s.label;
-  if (s.url === currentStyle) opt.selected = true;
-  sel.appendChild(opt);
-}});
-sel.addEventListener('change', () => map.setStyle(sel.value));
-document.getElementById('style-switcher').appendChild(sel);
-
-// Collapsible panel
-const panelBody = document.getElementById('panel-body');
-const chevron   = document.getElementById('panel-chevron');
-panelBody.style.maxHeight = '2000px';
-
-function updateMapPadding(panelOpen, animate=true) {{
-  const panel    = document.getElementById('panel');
-  const rightPad = panelOpen ? panel.offsetWidth + 20 : 0;
-  map.easeTo({{ padding: {{ top:0, bottom:0, left:0, right:rightPad }}, duration: animate ? 300 : 0 }});
-}}
-
-document.getElementById('panel-title').addEventListener('click', () => {{
-  const collapsed = panelBody.classList.toggle('collapsed');
-  chevron.textContent = collapsed ? '▸' : '▾';
-  if (!collapsed) panelBody.style.maxHeight = '2000px';
-  updateMapPadding(!collapsed);
-}});
-
-
-mapboxgl.accessToken = '{MAPBOX_TOKEN}';
-const map = new mapboxgl.Map({{
-  container: 'map',
-  style: 'mapbox://styles/mapbox/satellite-streets-v12',
-  projection: 'globe',
-  center: [142, 0],
-  zoom: 2.5,
-}});
-// Shift the camera so [142,0] is centred in the area left of the panel.
-// jumpTo sets internal state before the first render frame — no visible jump.
-const _initPad = (document.getElementById('panel').offsetWidth || 240) + 20;
-map.jumpTo({{ center:[142,0], zoom:2.5,
-              padding:{{top:0,bottom:0,left:0,right:_initPad}} }});
-map.addControl(new mapboxgl.NavigationControl(), 'top-left');
-
-// ---------- Perturbed circle click handler ----------
-const clickResult = document.getElementById('click-result');
-
-function clearPerturbed() {{
-  if (map.getSource('perturbed'))
-    map.getSource('perturbed').setData({{type:'FeatureCollection',features:[]}});
-  clickResult.style.display = 'none';
-  if (FINE_GRIDS) {{
-    drawHeatmap('hm-wet', FINE_GRIDS.wettest, null);
-    drawHeatmap('hm-dry', FINE_GRIDS.driest,  null);
-  }}
-}}
-
-map.on('click', e => {{
-  if (e.originalEvent._handled) return;
-  if (!FINE_GRIDS) return;
-  const clickPt = latlonToCart(e.lngLat.lat, e.lngLat.lng);
-  const features = [];
-  const parts   = [];
-  const hmHL    = {{}};
-
-  for (const [key, color] of [['wettest','#00e5ff'],['driest','#ff1744']]) {{
-    const gd = FINE_GRIDS[key];
-    const bestTheta = gd.theta_center_deg + gd.offsets_deg[gd.best_i];
-    const bestPhi   = gd.phi_center_deg   + gd.offsets_deg[gd.best_j];
-    const n0  = thetaPhiToNormal(bestTheta, bestPhi);
-    const n1  = perturbNormal(n0, clickPt);
-    if (!n1) continue;
-    const [tn, pn] = normalToThetaPhi(n1);
-    const frac = interpGrid(gd, tn, pn);
-    if (frac === null) continue;
-    features.push({{
-      type:'Feature',
-      properties:{{ color }},
-      geometry:{{ type:'LineString', coordinates:gcCoords(n1) }}
-    }});
-    const invert   = key === 'driest';
-    const bestDisp = invert ? `${{((1-gd.best_frac)*100).toFixed(2)}}% land`
-                            : `${{(gd.best_frac*100).toFixed(2)}}% ocean`;
-    const pertDisp = invert ? `${{((1-frac)*100).toFixed(2)}}% land`
-                            : `${{(frac*100).toFixed(2)}}% ocean`;
-    const label    = key === 'wettest' ? 'Wettest' : 'Driest';
-    parts.push(swatchHtml(color,false) + `${{label}} great circle: ${{bestDisp}}`
-             + `&ensp;` + swatchHtml(color,true) + pertDisp);
-    const pos = gridCoords(gd, tn, pn);
-    if (pos) hmHL[key] = {{...pos, color}};
-  }}
-
-  if (features.length === 0) {{ clearPerturbed(); return; }}
-  map.getSource('perturbed').setData({{type:'FeatureCollection',features}});
-  clickResult.innerHTML = parts.join('&ensp;&nbsp;·&ensp;&nbsp;');
-  clickResult.style.display = 'block';
-  drawHeatmap('hm-wet', FINE_GRIDS.wettest, hmHL.wettest || null);
-  drawHeatmap('hm-dry', FINE_GRIDS.driest,  hmHL.driest  || null);
-}});
-
-document.addEventListener('keydown', e => {{ if (e.key==='Escape') clearPerturbed(); }});
-
-class NorthUpControl {{
-  onAdd(map) {{
-    this._map = map;
-    this._container = document.createElement('div');
-    this._container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
-    const btn = document.createElement('button');
-    btn.title = 'Reset to north-up, no tilt';
-    btn.style.cssText = 'font-size:18px; font-weight:bold; width:30px; height:30px; cursor:pointer; background:rgba(255,255,255,0.9); border:none;';
-    btn.textContent = '⬆';
-    btn.addEventListener('click', () => map.easeTo({{ bearing: 0, pitch: 0, duration: 300 }}));
-    this._container.appendChild(btn);
-    return this._container;
-  }}
-  onRemove() {{ this._container.parentNode.removeChild(this._container); }}
-}}
-map.addControl(new NorthUpControl(), 'bottom-right');
-
-// ---------- Map layer setup (runs on every style load) ----------
-let togglesBuilt = false;
-
-function setupMapLayers() {{
-  map.setFog({{}});
-
-  LAYERS.forEach(l => {{
-    map.addSource(l.id, {{ type: 'geojson', data: DATA[l.id] }});
-    const paint = {{
-      'line-color':   l.color,
-      'line-width':   l.width,
-      'line-opacity': l.opacity,
-    }};
-    if (l.dashed) paint['line-dasharray'] = [5, 4];
-    const chk = document.getElementById(`chk-${{l.id}}`);
-    map.addLayer({{
-      id: l.id, type: 'line', source: l.id, paint,
-      layout: {{
-        'line-cap': l.dashed ? 'butt' : 'round',
-        'line-join': 'round',
-        'visibility': chk ? (chk.checked ? 'visible' : 'none') : (l.visible ? 'visible' : 'none'),
-      }},
-    }});
-  }});
-
-  // Pole markers for the best fine results
-  if (FINE_GRIDS) {{
-    const poleFeatures = [];
-    for (const [key, color] of [['wettest','#00e5ff'],['driest','#ff1744']]) {{
-      const gd   = FINE_GRIDS[key];
-      const tDeg = gd.theta_center_deg + gd.offsets_deg[gd.best_i];
-      const pDeg = gd.phi_center_deg   + gd.offsets_deg[gd.best_j];
-      const lat  = 90 - tDeg;
-      for (const [lon, la] of [[pDeg, lat], [pDeg - 180, -lat]]) {{
-        poleFeatures.push({{
-          type:'Feature',
-          properties:{{ color, label: key }},
-          geometry:{{ type:'Point', coordinates:[lon, la] }}
-        }});
-      }}
-    }}
-    map.addSource('poles', {{
-      type:'geojson',
-      data:{{type:'FeatureCollection', features:poleFeatures}}
-    }});
-    map.addLayer({{
-      id:'poles', type:'symbol', source:'poles',
-      layout:{{
-        'text-field': '+',
-        'text-size': 24,
-        'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
-        'text-allow-overlap': true,
-        'text-ignore-placement': true,
-      }},
-      paint:{{
-        'text-color': ['get', 'color'],
-        'text-halo-color': 'rgba(0,0,0,0.7)',
-        'text-halo-width': 1.5,
-      }}
-    }});
-
-    map.on('click', 'poles', e => {{
-      e.originalEvent._handled = true;
-      const p   = e.features[0].properties;
-      const [lon, lat] = e.features[0].geometry.coordinates;
-      const gd  = FINE_GRIDS[p.label];
-      const invert = p.label === 'driest';
-      const frac = invert
-        ? `${{((1 - gd.best_frac) * 100).toFixed(2)}}% land`
-        : `${{(gd.best_frac * 100).toFixed(2)}}% ocean`;
-      const latS = Math.abs(lat).toFixed(2) + (lat >= 0 ? '°N' : '°S');
-      const lonS = Math.abs(lon).toFixed(2) + (lon >= 0 ? '°E' : '°W');
-      clickResult.textContent =
-        `${{p.label}} circle pole  ·  ${{frac}}  ·  ${{latS}} ${{lonS}}  ·  axis point equidistant from every point on the circle`;
-      clickResult.style.display = 'block';
-    }});
-    map.on('mousemove',  'poles', () => {{ map.getCanvas().style.cursor = 'pointer'; }});
-    map.on('mouseleave', 'poles', () => {{ map.getCanvas().style.cursor = ''; }});
-  }}
-
-  // Perturbed circle source + layer
-  map.addSource('perturbed', {{ type:'geojson', data:{{type:'FeatureCollection',features:[]}} }});
-  map.addLayer({{
-    id:'perturbed', type:'line', source:'perturbed',
-    paint:{{ 'line-color':['get','color'], 'line-width':2.5,
-             'line-opacity':0.9, 'line-dasharray':[6,4] }},
-    layout:{{ 'line-cap':'butt', 'line-join':'round' }}
-  }});
-
-  // Hover tooltip
-  const tip = document.getElementById('tooltip');
-  LAYERS.forEach(l => {{
-    map.on('mousemove', l.id, e => {{
-      const p = e.features[0].properties;
-      tip.textContent = `${{p.label}}  ·  ${{p.ocean_pct}}  ·  ${{poleStr(p.theta, p.phi)}}`;
-      tip.classList.add('on');
-      map.getCanvas().style.cursor = 'crosshair';
-    }});
-    map.on('mouseleave', l.id, () => {{
-      tip.classList.remove('on');
-      map.getCanvas().style.cursor = '';
-    }});
-  }});
-
-  // Toggles — built once, persist across style switches
-  if (!togglesBuilt) {{
-    const container = document.getElementById('toggles');
-    LAYERS.forEach(l => {{
-      const div = document.createElement('div');
-      div.className = 'row';
-      const swatchH = l.id.endsWith('-fine') ? 5 : l.id.endsWith('-best') ? 3 : 2;
-      div.innerHTML = `
-        <input type="checkbox" id="chk-${{l.id}}" ${{l.visible ? 'checked' : ''}}>
-        <div class="swatch${{l.dashed ? ' dashed' : ''}}"
-             style="background:${{l.color}}; --c:${{l.color}}; height:${{swatchH}}px"></div>
-        <label for="chk-${{l.id}}">${{l.label}}</label>`;
-      div.querySelector('input').addEventListener('change', e =>
-        map.setLayoutProperty(l.id, 'visibility', e.target.checked ? 'visible' : 'none'));
-      container.appendChild(div);
-    }});
-    togglesBuilt = true;
-  }}
-}}
-
-// ---------- Boot: wait for both style and data ----------
-let styleReady = false;
-let dataReady  = false;
-
-map.on('style.load', () => {{
-  styleReady = true;
-  if (dataReady) setupMapLayers();
-}});
-
-fetch('data.json')
-  .then(r => r.json())
-  .then(d => {{
-    DATA       = d.layers;
-    LAYERS     = d.layer_meta;
-    FINE_GRIDS = d.fine_grids;
-    dataReady  = true;
-    if (styleReady) setupMapLayers();
-    initHeatmaps();
-  }})
-  .catch(err => console.error('Failed to load data.json:', err));
-</script>
-</body>
-</html>"""
+    print(f'Written to visuals.json ({len(json.dumps(payload, separators=(",", ":"))) // 1024} KB)')
 
 
 if __name__ == '__main__':
-    print('Computing great circle coordinates...')
+    results = load_results()
+
+    wet_coarse = [tuple(r) for r in results['wettest']['coarse']]
+    dry_coarse = [tuple(r) for r in results['driest']['coarse']]
+
+    has_fine = 'fine' in results['wettest'] and 'fine' in results['driest']
+    if has_fine:
+        wet_fine = [best_fine_result(g) for g in results['wettest']['fine']]
+        dry_fine = [best_fine_result(g) for g in results['driest']['fine']]
+    else:
+        wet_fine = wet_coarse[:1]
+        dry_fine = dry_coarse[:1]
+
+    def pct(frac, invert=False):
+        v = (1 - frac) if invert else frac
+        suffix = 'land' if invert else 'ocean'
+        return f'{v*100:.2f}% {suffix}'
+
+    zoom_fine   = ['interpolate', ['exponential', 2], ['zoom'], 0, 4,   5, 4,   10, 130]
+    zoom_best   = ['interpolate', ['exponential', 2], ['zoom'], 0, 2.5, 5, 2.5, 10, 80]
+    zoom_others = ['interpolate', ['exponential', 2], ['zoom'], 0, 1,   5, 1,   10, 30]
+
     layers = [
-        dict(id='wettest-coarse',     label='Wettest top 10 (coarse)',
-             color='#1565c0', width=['interpolate', ['exponential', 2], ['zoom'], 0, 1, 5, 1, 10, 30],
-             opacity=0.40, dashed=False, visible=False,
-             geojson=make_geojson(WETTEST_COARSE,    lambda i: f'Wettest #{i+1} (coarse)')),
-        dict(id='wettest-coarse-best',label='Wettest best (coarse) — 91.50%',
-             color='#29b6f6', width=['interpolate', ['exponential', 2], ['zoom'], 0, 2.5, 5, 2.5, 10, 80],
-             opacity=0.75, dashed=False, visible=False,
-             geojson=make_geojson(WETTEST_COARSE[:1],lambda i: 'Wettest best (coarse)')),
-        dict(id='wettest-fine',       label='Wettest best (fine) — 91.61%',
-             color='#00e5ff', width=['interpolate', ['exponential', 2], ['zoom'], 0, 4, 5, 4, 10, 130],
-             opacity=0.85, dashed=False, visible=True,
-             geojson=make_geojson(WETTEST_FINE,      lambda i: 'Wettest best (fine)')),
-        dict(id='driest-coarse',      label='Driest top 10 (coarse)',
-             color='#7f0000', width=['interpolate', ['exponential', 2], ['zoom'], 0, 1, 5, 1, 10, 30],
-             opacity=0.40, dashed=False, visible=False,
-             geojson=make_geojson(DRIEST_COARSE,     lambda i: f'Driest #{i+1} (coarse)', invert=True)),
-        dict(id='driest-coarse-best', label='Driest best (coarse) — 57.19% land',
-             color='#ff6d00', width=['interpolate', ['exponential', 2], ['zoom'], 0, 2.5, 5, 2.5, 10, 80],
-             opacity=0.75, dashed=False, visible=False,
-             geojson=make_geojson(DRIEST_COARSE[:1], lambda i: 'Driest best (coarse)', invert=True)),
-        dict(id='driest-fine',        label='Driest best (fine) — 57.72% land',
-             color='#ff1744', width=['interpolate', ['exponential', 2], ['zoom'], 0, 4, 5, 4, 10, 130],
-             opacity=0.85, dashed=False, visible=True,
-             geojson=make_geojson(DRIEST_FINE[:1],   lambda i: 'Driest best (fine)', invert=True)),
+        dict(id='wettest-coarse',
+             label='Wettest top 10 (coarse)',
+             color='#1565c0', width=zoom_others, opacity=0.40, dashed=False, visible=False,
+             geojson=make_geojson(wet_coarse, lambda i: f'Wettest #{i+1} (coarse)')),
+        dict(id='wettest-coarse-best',
+             label=f'Wettest best (coarse) — {pct(wet_coarse[0][2])}',
+             color='#29b6f6', width=zoom_best, opacity=0.75, dashed=False, visible=False,
+             geojson=make_geojson(wet_coarse[:1], lambda i: 'Wettest best (coarse)')),
+        dict(id='wettest-fine',
+             label=f'Wettest best (fine) — {pct(wet_fine[0][2])}',
+             color='#00e5ff', width=zoom_fine, opacity=0.85, dashed=False, visible=True,
+             geojson=make_geojson(wet_fine[:1], lambda i: 'Wettest best (fine)')),
+        dict(id='driest-coarse',
+             label='Driest top 10 (coarse)',
+             color='#7f0000', width=zoom_others, opacity=0.40, dashed=False, visible=False,
+             geojson=make_geojson(dry_coarse, lambda i: f'Driest #{i+1} (coarse)', invert=True)),
+        dict(id='driest-coarse-best',
+             label=f'Driest best (coarse) — {pct(dry_coarse[0][2], invert=True)}',
+             color='#ff6d00', width=zoom_best, opacity=0.75, dashed=False, visible=False,
+             geojson=make_geojson(dry_coarse[:1], lambda i: 'Driest best (coarse)', invert=True)),
+        dict(id='driest-fine',
+             label=f'Driest best (fine) — {pct(dry_fine[0][2], invert=True)}',
+             color='#ff1744', width=zoom_fine, opacity=0.85, dashed=False, visible=True,
+             geojson=make_geojson(dry_fine[:1], lambda i: 'Driest best (fine)', invert=True)),
     ]
 
-    fine_grids = load_fine_grids()
-    if fine_grids:
-        print('Loaded fine search grids from fine_grids.json')
-    else:
-        print('No fine_grids.json found — heatmaps will be hidden')
+    fine_grids = fine_grids_from_results(results)
+    if not fine_grids:
+        print('No fine results in results.json — heatmaps will be hidden')
 
     write_data_json(layers, fine_grids)
-
-    html = generate_html()
-    with open('results.html', 'w') as f:
-        f.write(html)
-    print('Written to results.html — serve alongside data.json (needs HTTP, not file://)')
