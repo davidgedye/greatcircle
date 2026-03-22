@@ -409,6 +409,8 @@ def sanity_check(mask: np.ndarray, grid: dict):
 def main():
     parser = argparse.ArgumentParser(description="Find wettest/driest great circles.")
     parser.add_argument("data", help="Path to ETOPO1/GEBCO NetCDF file")
+    parser.add_argument("--lakes-mask", metavar="PATH",
+                        help="Path to lakes mask .npy (adds oceans+lakes results)")
     parser.add_argument("--grid", type=int, default=180,
                         help="Grid size N (NxN search, default 180)")
     parser.add_argument("--pts", type=int, default=3600,
@@ -419,9 +421,30 @@ def main():
                         help="Skip fine zoom search")
     parser.add_argument("--top", type=int, default=10,
                         help="Number of top results to show (default 10)")
+    parser.add_argument("--output", metavar="PATH",
+                        help="Output JSON file (default: wettest-driest[-including-lakes].json)")
     args = parser.parse_args()
 
+    if args.output is None:
+        args.output = "wettest-driest-including-lakes.json" if args.lakes_mask else "wettest-driest.json"
+
     mask, grid = load_water_mask(args.data)
+
+    if args.lakes_mask:
+        print(f"Loading lakes mask from {args.lakes_mask} ...")
+        lakes = np.load(args.lakes_mask)
+        if lakes.shape != mask.shape:
+            raise ValueError(f"Lakes mask shape {lakes.shape} != GEBCO mask shape {mask.shape}")
+        mask = np.where(lakes, np.int8(1), mask)
+        added = int(lakes.sum()) - int((mask & lakes).sum() - lakes.sum() + lakes.sum())
+        print(f"  Combined water fraction: {mask.mean():.3f}  "
+              f"(lake-only cells added: {(lakes & (mask == 1)).sum() - (mask & ~lakes).sum():,})")
+        wet_key = "wettest-lakes"
+        dry_key = "driest-lakes"
+    else:
+        wet_key = "wettest"
+        dry_key = "driest"
+
     sanity_check(mask, grid)
 
     results = coarse_search(mask, grid,
@@ -429,8 +452,8 @@ def main():
                             n_pts=args.pts,
                             workers=args.workers)
 
-    report(results, "WETTEST GREAT CIRCLES (coarse)", top_n=args.top)
-    report(list(reversed(results)), "DRIEST GREAT CIRCLES (coarse)", top_n=args.top)
+    report(results, f"WETTEST GREAT CIRCLES — {wet_key} (coarse)", top_n=args.top)
+    report(list(reversed(results)), f"DRIEST GREAT CIRCLES — {dry_key} (coarse)", top_n=args.top)
 
     import json as _json
 
@@ -439,23 +462,23 @@ def main():
                 for f, t, p in rad_results]
 
     output = {
-        "wettest": {"coarse": _deg(results[:10])},
-        "driest":  {"coarse": _deg(reversed(results[-10:]))},
+        wet_key: {"coarse": _deg(results[:args.top])},
+        dry_key: {"coarse": _deg(list(reversed(results[-args.top:])))},
     }
 
     if not args.no_fine:
-        top_wet = results[:10]
-        top_dry = results[-10:]
+        top_wet = results[:args.top]
+        top_dry = results[-args.top:]
         fine_wet, grids_wet = fine_search(mask, grid, top_wet, minimize=False, n_pts=args.pts, workers=args.workers)
         fine_dry, grids_dry = fine_search(mask, grid, top_dry, minimize=True,  n_pts=args.pts, workers=args.workers)
-        report(fine_wet, "WETTEST GREAT CIRCLES (fine)", top_n=5)
-        report(fine_dry, "DRIEST GREAT CIRCLES (fine)", top_n=5)
-        output["wettest"]["fine"] = grids_wet
-        output["driest"]["fine"]  = grids_dry
+        report(fine_wet, f"WETTEST GREAT CIRCLES — {wet_key} (fine)", top_n=5)
+        report(fine_dry, f"DRIEST GREAT CIRCLES — {dry_key} (fine)", top_n=5)
+        output[wet_key]["fine"] = grids_wet
+        output[dry_key]["fine"] = grids_dry
 
-    with open("results.json", "w") as f:
+    with open(args.output, "w") as f:
         _json.dump(output, f)
-    print("\nResults saved to results.json")
+    print(f"\nResults saved to {args.output}")
 
 
 if __name__ == "__main__":

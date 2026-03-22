@@ -1,5 +1,5 @@
 """
-visualize.py — Read results.json and write data.json for the interactive globe.
+visualize.py — Read results.json and write visuals.json for the interactive globe.
 
 Usage:
     python3 visualize.py
@@ -9,7 +9,25 @@ import json
 import numpy as np
 
 
-# ---------- Load results from results.json ----------
+# Metadata for each experiment key: display label, whether to invert (show as % land),
+# and default colours for coarse layers.  Extend when new experiments are added.
+EXPERIMENT_META = {
+    "wettest":       dict(label="Wettest (oceans only)",    invert=False,
+                          color_fine="#00e5ff", color_best="#29b6f6", color_coarse="#1565c0"),
+    "driest":        dict(label="Driest (oceans only)",     invert=True,
+                          color_fine="#ff1744", color_best="#ff6d00", color_coarse="#7f0000"),
+    "wettest-lakes": dict(label="Wettest (oceans & lakes)", invert=False,
+                          color_fine="#00e5ff", color_best="#29b6f6", color_coarse="#1565c0"),
+    "driest-lakes":  dict(label="Driest (oceans & lakes)",  invert=True,
+                          color_fine="#ff1744", color_best="#ff6d00", color_coarse="#7f0000"),
+}
+
+zoom_fine   = ['interpolate', ['exponential', 2], ['zoom'], 0, 4,   5, 4,   10, 130]
+zoom_best   = ['interpolate', ['exponential', 2], ['zoom'], 0, 2.5, 5, 2.5, 10, 80]
+zoom_others = ['interpolate', ['exponential', 2], ['zoom'], 0, 1,   5, 1,   10, 30]
+
+
+# ---------- Load results ----------
 
 def load_results():
     import os, sys
@@ -49,17 +67,14 @@ def great_circle_coords(theta_deg, phi_deg, n_pts=360):
 
 
 def unwrap_coords(coords):
-    """Unwrap longitudes so consecutive values never jump by more than 180°.
-    This keeps the line continuous across the antimeridian on a globe projection."""
+    """Unwrap longitudes so consecutive values never jump by more than 180°."""
     result = [coords[0]]
     for c in coords[1:]:
         prev_lon = result[-1][0]
         lon = c[0]
         diff = lon - prev_lon
-        if diff > 180:
-            lon -= 360
-        elif diff < -180:
-            lon += 360
+        if diff > 180:   lon -= 360
+        elif diff < -180: lon += 360
         result.append([lon, c[1]])
     return result
 
@@ -84,18 +99,45 @@ def make_geojson(circles, rank_label, invert=False):
     return {'type': 'FeatureCollection', 'features': features}
 
 
-# ---------- Data ----------
+# ---------- Build layers for one experiment ----------
 
-def fine_grids_from_results(results):
-    """Extract the best fine grid for each category, for heatmap rendering."""
-    wet = results.get('wettest', {}).get('fine')
-    dry = results.get('driest',  {}).get('fine')
-    if not wet or not dry:
-        return None
-    return {'wettest': wet[0], 'driest': dry[0]}
+def layers_for_experiment(key, exp_results):
+    meta = EXPERIMENT_META.get(key, {
+        'label': key, 'invert': False,
+        'color_fine': '#00e5ff', 'color_best': '#aaaaaa', 'color_coarse': '#444444',
+    })
+    invert = meta['invert']
+
+    coarse = [tuple(r) for r in exp_results['coarse']]
+    has_fine = 'fine' in exp_results
+    if has_fine:
+        fine = [best_fine_result(g) for g in exp_results['fine']]
+    else:
+        fine = coarse[:1]
+
+    def pct(frac):
+        v = (1 - frac) if invert else frac
+        return f'{v*100:.2f}% {"land" if invert else "ocean"}'
+
+    return [
+        dict(id=f'{key}-coarse',
+             label=f'{meta["label"]} top 10 (coarse)',
+             color=meta['color_coarse'], width=zoom_others, opacity=0.40, dashed=False, visible=False,
+             geojson=make_geojson(coarse, lambda i: f'{meta["label"]} #{i+1} (coarse)', invert=invert)),
+        dict(id=f'{key}-coarse-best',
+             label=f'{meta["label"]} best (coarse) — {pct(coarse[0][2])}',
+             color=meta['color_best'], width=zoom_best, opacity=0.75, dashed=False, visible=False,
+             geojson=make_geojson(coarse[:1], lambda i: f'{meta["label"]} best (coarse)', invert=invert)),
+        dict(id=f'{key}-fine',
+             label=f'{meta["label"]} best (fine) — {pct(fine[0][2])}',
+             color=meta['color_fine'], width=zoom_fine, opacity=0.85, dashed=False, visible=True,
+             geojson=make_geojson(fine[:1], lambda i: f'{meta["label"]} best (fine)', invert=invert)),
+    ]
 
 
-def write_data_json(layers, fine_grids):
+# ---------- Output ----------
+
+def write_visuals_json(layers, fine_grids):
     payload = {
         'layers':     {l['id']: l['geojson'] for l in layers},
         'layer_meta': [{k: v for k, v in l.items() if k != 'geojson'} for l in layers],
@@ -109,55 +151,16 @@ def write_data_json(layers, fine_grids):
 if __name__ == '__main__':
     results = load_results()
 
-    wet_coarse = [tuple(r) for r in results['wettest']['coarse']]
-    dry_coarse = [tuple(r) for r in results['driest']['coarse']]
+    layers = []
+    fine_grids = {}
 
-    has_fine = 'fine' in results['wettest'] and 'fine' in results['driest']
-    if has_fine:
-        wet_fine = [best_fine_result(g) for g in results['wettest']['fine']]
-        dry_fine = [best_fine_result(g) for g in results['driest']['fine']]
-    else:
-        wet_fine = wet_coarse[:1]
-        dry_fine = dry_coarse[:1]
+    for key, exp_results in results.items():
+        layers.extend(layers_for_experiment(key, exp_results))
+        if 'fine' in exp_results:
+            fine_grids[key] = exp_results['fine'][0]
 
-    def pct(frac, invert=False):
-        v = (1 - frac) if invert else frac
-        suffix = 'land' if invert else 'ocean'
-        return f'{v*100:.2f}% {suffix}'
-
-    zoom_fine   = ['interpolate', ['exponential', 2], ['zoom'], 0, 4,   5, 4,   10, 130]
-    zoom_best   = ['interpolate', ['exponential', 2], ['zoom'], 0, 2.5, 5, 2.5, 10, 80]
-    zoom_others = ['interpolate', ['exponential', 2], ['zoom'], 0, 1,   5, 1,   10, 30]
-
-    layers = [
-        dict(id='wettest-coarse',
-             label='Wettest top 10 (coarse)',
-             color='#1565c0', width=zoom_others, opacity=0.40, dashed=False, visible=False,
-             geojson=make_geojson(wet_coarse, lambda i: f'Wettest #{i+1} (coarse)')),
-        dict(id='wettest-coarse-best',
-             label=f'Wettest best (coarse) — {pct(wet_coarse[0][2])}',
-             color='#29b6f6', width=zoom_best, opacity=0.75, dashed=False, visible=False,
-             geojson=make_geojson(wet_coarse[:1], lambda i: 'Wettest best (coarse)')),
-        dict(id='wettest-fine',
-             label=f'Wettest best (fine) — {pct(wet_fine[0][2])}',
-             color='#00e5ff', width=zoom_fine, opacity=0.85, dashed=False, visible=True,
-             geojson=make_geojson(wet_fine[:1], lambda i: 'Wettest best (fine)')),
-        dict(id='driest-coarse',
-             label='Driest top 10 (coarse)',
-             color='#7f0000', width=zoom_others, opacity=0.40, dashed=False, visible=False,
-             geojson=make_geojson(dry_coarse, lambda i: f'Driest #{i+1} (coarse)', invert=True)),
-        dict(id='driest-coarse-best',
-             label=f'Driest best (coarse) — {pct(dry_coarse[0][2], invert=True)}',
-             color='#ff6d00', width=zoom_best, opacity=0.75, dashed=False, visible=False,
-             geojson=make_geojson(dry_coarse[:1], lambda i: 'Driest best (coarse)', invert=True)),
-        dict(id='driest-fine',
-             label=f'Driest best (fine) — {pct(dry_fine[0][2], invert=True)}',
-             color='#ff1744', width=zoom_fine, opacity=0.85, dashed=False, visible=True,
-             geojson=make_geojson(dry_fine[:1], lambda i: 'Driest best (fine)', invert=True)),
-    ]
-
-    fine_grids = fine_grids_from_results(results)
     if not fine_grids:
         print('No fine results in results.json — heatmaps will be hidden')
+        fine_grids = None
 
-    write_data_json(layers, fine_grids)
+    write_visuals_json(layers, fine_grids)
