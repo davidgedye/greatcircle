@@ -11,6 +11,7 @@
   body { background: #000; font-family: 'Courier New', monospace; }
   #map { position: absolute; inset: 0; }
 
+  /* ── Panel shell ── */
   #panel {
     position: absolute; top: 16px; right: 16px;
     background: rgba(8,8,8,0.82); border: 1px solid #2a2a2a;
@@ -24,17 +25,35 @@
     cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center;
   }
   #panel h3:hover { color: #ccc; }
-  #style-switcher {
-    display: flex; align-items: center;
-    margin-bottom: 10px; border-bottom: 1px solid #2a2a2a; padding-bottom: 10px;
-  }
-  #style-switcher select {
-    flex: 1; background: #1a1a1a; color: #ccc; border: 1px solid #333;
-    border-radius: 4px; padding: 4px 6px; font-size: 12px; font-family: inherit; cursor: pointer;
-  }
   #panel-chevron { font-size: 33px; line-height: 1; }
   #panel-body { overflow: hidden; transition: max-height 0.25s ease, opacity 0.25s ease; }
   #panel-body.collapsed { max-height: 0 !important; opacity: 0; }
+
+  /* ── Summary rows (top of panel) ── */
+  #summary { margin-bottom: 4px; }
+  .summary-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+  .summary-row + .summary-row { border-top: 1px solid #1e1e1e; }
+  .slot-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; opacity: 0.9; }
+  .slot-info { display: flex; flex-direction: column; gap: 1px; }
+  .slot-label { font-size: 11px; color: #bbb; }
+  .slot-pct   { font-size: 13px; font-weight: bold; }
+
+  /* ── Collapsible sections ── */
+  .section-hdr {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; color: #666; letter-spacing: 2px;
+    cursor: pointer; user-select: none;
+    padding: 8px 0; border-top: 1px solid #2a2a2a; margin-top: 4px;
+  }
+  .section-hdr:hover { color: #aaa; }
+  .sec-chevron { font-size: 12px; }
+  .section-body {
+    overflow: hidden; max-height: 0; opacity: 0;
+    transition: max-height 0.3s ease, opacity 0.25s ease;
+  }
+  .section-body.open { max-height: 2000px; opacity: 1; }
+
+  /* ── Layer toggles ── */
   .row { display: flex; align-items: center; margin: 6px 0; gap: 8px; cursor: pointer; }
   .row input { cursor: pointer; margin: 0; accent-color: #aaa; }
   .swatch { width: 26px; height: 3px; border-radius: 1px; flex-shrink: 0; }
@@ -43,7 +62,43 @@
       var(--c) 0 5px, transparent 5px 9px) !important;
   }
   .row label { cursor: pointer; line-height: 1.4; }
+  #toggles { margin-top: 6px; }
 
+  /* ── Heatmaps ── */
+  #heatmaps { margin-bottom: 8px; }
+  .hm-pair { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .hm-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .hm-label { font-size: 10px; color: #888; letter-spacing: 1px; text-align: center; }
+  .hm-pct   { font-size: 11px; font-weight: bold; }
+  canvas.heatmap {
+    image-rendering: pixelated;
+    border: 1px solid #333; border-radius: 2px; cursor: crosshair;
+  }
+
+  /* ── Slot radio controls ── */
+  .slot-radio-group { margin-bottom: 12px; }
+  .slot-radio-header {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 10px; color: #888; letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .slot-radio-bar { width: 22px; height: 4px; border-radius: 1px; flex-shrink: 0; }
+  .slot-radio-option { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+  .slot-radio-option input { cursor: pointer; margin: 0; accent-color: #888; }
+  .slot-radio-option label { cursor: pointer; font-size: 11px; color: #ddd; }
+  .slot-radio-option input:disabled { cursor: default; }
+  .slot-radio-option input:disabled + label { cursor: default; }
+
+  /* ── Style switcher ── */
+  #style-switcher {
+    display: flex; align-items: center;
+    margin-top: 10px; border-top: 1px solid #2a2a2a; padding-top: 10px;
+  }
+  #style-switcher select {
+    flex: 1; background: #1a1a1a; color: #ccc; border: 1px solid #333;
+    border-radius: 4px; padding: 4px 6px; font-size: 12px; font-family: inherit; cursor: pointer;
+  }
+
+  /* ── HUD overlays ── */
   #tooltip {
     position: absolute; bottom: 22px; left: 50%;
     transform: translateX(-50%);
@@ -53,7 +108,6 @@
     opacity: 0; transition: opacity 0.15s; white-space: nowrap;
   }
   #tooltip.on { opacity: 1; }
-
   #click-result {
     position: absolute; bottom: 58px; left: 50%;
     transform: translateX(-50%);
@@ -62,72 +116,102 @@
     padding: 7px 16px; border-radius: 5px;
     pointer-events: none; display: none; white-space: nowrap;
   }
-
-  #heatmaps {
-    margin-top: 12px; border-top: 1px solid #2a2a2a; padding-top: 10px;
-  }
-  #heatmaps h4 {
-    font-size: 10px; color: #888; letter-spacing: 2px; margin-bottom: 8px;
-  }
-  .hm-pair {
-    display: flex; flex-direction: column; gap: 10px; align-items: center;
-  }
-  .hm-block {
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-  }
-  .hm-label {
-    font-size: 10px; color: #999; letter-spacing: 1px;
-  }
-  .hm-pct {
-    font-size: 11px; font-weight: bold;
-  }
-  canvas.heatmap {
-    image-rendering: pixelated;
-    border: 1px solid #333; border-radius: 2px;
-    cursor: crosshair;
-  }
 </style>
 </head>
 <body>
 <div id="map"></div>
+
 <div id="panel">
   <h3 id="panel-title">GREAT CIRCLES <span id="panel-chevron">▾</span></h3>
   <div id="panel-body">
-  <div id="style-switcher"><span style="font-size:10px;color:#888;letter-spacing:2px;margin-right:8px;">MAP</span></div>
-  <div id="toggles"></div>
-  <div id="heatmaps" style="display:none">
-    <h4>FINE SEARCH SURFACE</h4>
-    <div class="hm-pair">
-      <div class="hm-block">
-        <div class="hm-label">WETTEST</div>
-        <canvas class="heatmap" id="hm-wet" width="220" height="220"></canvas>
-        <div class="hm-pct" id="hm-wet-pct" style="color:#00e5ff"></div>
+
+    <!-- Summary: one row per slot -->
+    <div id="summary">
+      <div class="summary-row">
+        <div class="slot-swatch" id="slot-swatch-0" style="background:#00e5ff"></div>
+        <div class="slot-info">
+          <div class="slot-label" id="slot-label-0">–</div>
+          <div class="slot-pct"   id="slot-pct-0"   style="color:#00e5ff">–</div>
+        </div>
       </div>
-      <div class="hm-block">
-        <div class="hm-label">DRIEST</div>
-        <canvas class="heatmap" id="hm-dry" width="220" height="220"></canvas>
-        <div class="hm-pct" id="hm-dry-pct" style="color:#ff1744"></div>
+      <div class="summary-row">
+        <div class="slot-swatch" id="slot-swatch-1" style="background:#ff1744"></div>
+        <div class="slot-info">
+          <div class="slot-label" id="slot-label-1">–</div>
+          <div class="slot-pct"   id="slot-pct-1"   style="color:#ff1744">–</div>
+        </div>
       </div>
     </div>
-  </div>
-  </div>
-</div>
+
+    <!-- Details section -->
+    <div class="section-hdr" id="details-hdr">
+      <span>DETAILS</span><span class="sec-chevron">▸</span>
+    </div>
+    <div class="section-body" id="details-body">
+      <div id="heatmaps">
+        <div class="hm-pair">
+          <div class="hm-block">
+            <div class="hm-label" id="hm-0-label"></div>
+            <canvas class="heatmap" id="hm-0" width="220" height="220"></canvas>
+            <div class="hm-pct" id="hm-0-pct"></div>
+          </div>
+          <div class="hm-block">
+            <div class="hm-label" id="hm-1-label"></div>
+            <canvas class="heatmap" id="hm-1" width="220" height="220"></canvas>
+            <div class="hm-pct" id="hm-1-pct"></div>
+          </div>
+        </div>
+      </div>
+      <div id="toggles"></div>
+    </div>
+
+    <!-- Map selection section -->
+    <div class="section-hdr" id="mapsel-hdr">
+      <span>MAP SELECTION</span><span class="sec-chevron">▸</span>
+    </div>
+    <div class="section-body" id="mapsel-body">
+      <div id="slot-controls"></div>
+      <div id="style-switcher">
+        <span style="font-size:10px;color:#888;letter-spacing:2px;margin-right:8px;">MAP</span>
+      </div>
+    </div>
+
+  </div><!-- /panel-body -->
+</div><!-- /panel -->
+
 <div id="tooltip"></div>
 <div id="click-result"></div>
 
 <script>
 let DATA, LAYERS, FINE_GRIDS;
 
-// --- Heatmap rendering ---
+// ── Slot state ──────────────────────────────────────────────────────────────
+const SLOT_COLORS = ['#00e5ff', '#ff1744'];
+let slots = ['wettest', 'driest'];
+
+// Metadata per experiment key — extend as new experiments are added to visuals.json
+const EXPERIMENTS = {
+  'wettest':        { label: 'Wettest (oceans only)',     invert: false },
+  'driest':         { label: 'Driest (oceans only)',      invert: true  },
+  'wettest-lakes':  { label: 'Wettest (oceans & lakes)',  invert: false, disabled: true },
+  'driest-lakes':   { label: 'Driest (oceans & lakes)',   invert: true,  disabled: true },
+};
+
+function expFmt(key, frac) {
+  return EXPERIMENTS[key].invert
+    ? `${((1 - frac) * 100).toFixed(2)}% land`
+    : `${(frac * 100).toFixed(2)}% ocean`;
+}
+
+// ── Heatmap rendering ───────────────────────────────────────────────────────
 function heatColor(t) {
-  // t=0 → red (dry), t=1 → blue (wet), returns [r, g, b]
   const r = Math.round(255 * (1 - t) * (t < 0.5 ? 1 : 2 * (1 - t)));
   const g = Math.round(255 * Math.min(2 * t, 2 * (1 - t)) * 0.5);
   const b = Math.round(255 * t * (t > 0.5 ? 1 : 2 * t));
   return [r, g, b];
 }
 
-function drawHeatmap(canvasId, data, highlight=null) {
+function drawHeatmap(canvasId, data, highlight = null) {
   const canvas = document.getElementById(canvasId);
   const ctx = canvas.getContext('2d');
   const n = data.grid.length;
@@ -145,7 +229,7 @@ function drawHeatmap(canvasId, data, highlight=null) {
       const t = (data.grid[i][j] - min) / range;
       const c = heatColor(t);
       const idx = (i * n + j) * 4;
-      img.data[idx]=c[0]; img.data[idx+1]=c[1]; img.data[idx+2]=c[2]; img.data[idx+3]=255;
+      img.data[idx] = c[0]; img.data[idx+1] = c[1]; img.data[idx+2] = c[2]; img.data[idx+3] = 255;
     }
   }
   octx.putImageData(img, 0, 0);
@@ -153,30 +237,41 @@ function drawHeatmap(canvasId, data, highlight=null) {
   ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
 
   const pw = canvas.width / n, ph = canvas.height / n;
-
   function drawCrosshair(i_f, j_f, color) {
     const cx = (j_f + 0.5) * pw, cy = (i_f + 0.5) * ph;
     ctx.strokeStyle = color; ctx.lineWidth = 1.5;
     const r = pw * 2;
-    ctx.beginPath(); ctx.moveTo(cx-r,cy); ctx.lineTo(cx+r,cy); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx,cy-r); ctx.lineTo(cx,cy+r); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); ctx.stroke();
   }
 
   drawCrosshair(data.best_i, data.best_j, '#fff');
   if (highlight !== null) drawCrosshair(highlight.i_f, highlight.j_f, highlight.color || '#ffff00');
 }
 
-function initHeatmap(canvasId, pctId, data, key, color, invert=false) {
-  const canvas = document.getElementById(canvasId);
-  const pct    = document.getElementById(pctId);
-  const n      = data.grid.length;
-  const fmt = v => invert
-    ? ((1-v)*100).toFixed(2) + '% land'
-    : (v*100).toFixed(2) + '% ocean';
-  const best = fmt(data.best_frac) + ' (best)';
-  pct.textContent = best;
+function renderHeatmaps() {
+  if (!FINE_GRIDS) return;
+  for (let i = 0; i < 2; i++) {
+    const key = slots[i];
+    const gd  = FINE_GRIDS[key];
+    drawHeatmap(`hm-${i}`, gd);
+    document.getElementById(`hm-${i}-label`).textContent = EXPERIMENTS[key].label.toUpperCase();
+    const pctEl = document.getElementById(`hm-${i}-pct`);
+    pctEl.textContent = expFmt(key, gd.best_frac) + ' (best)';
+    pctEl.style.color = SLOT_COLORS[i];
+  }
+}
+
+function initHeatmap(slotIdx) {
+  const canvasId = `hm-${slotIdx}`;
+  const pctId    = `hm-${slotIdx}-pct`;
+  const canvas   = document.getElementById(canvasId);
+  const pct      = document.getElementById(pctId);
 
   canvas.addEventListener('mousemove', e => {
+    const key  = slots[slotIdx];
+    const data = FINE_GRIDS[key];
+    const n    = data.grid.length;
     const rect = canvas.getBoundingClientRect();
     const j = Math.floor((e.clientX - rect.left) / rect.width  * n);
     const i = Math.floor((e.clientY - rect.top)  / rect.height * n);
@@ -184,13 +279,20 @@ function initHeatmap(canvasId, pctId, data, key, color, invert=false) {
       const val  = data.grid[i][j];
       const tDeg = data.theta_center_deg + data.offsets_deg[i];
       const pDeg = data.phi_center_deg   + data.offsets_deg[j];
-      pct.textContent = fmt(val) + `  (${poleStr(tDeg, pDeg)})`;
+      pct.textContent = expFmt(key, val) + `  (${poleStr(tDeg, pDeg)})`;
     }
   });
-  canvas.addEventListener('mouseleave', () => { pct.textContent = best; });
+  canvas.addEventListener('mouseleave', () => {
+    const key = slots[slotIdx];
+    pct.textContent = expFmt(key, FINE_GRIDS[key].best_frac) + ' (best)';
+  });
 
   canvas.addEventListener('click', e => {
-    const rect = canvas.getBoundingClientRect();
+    const key   = slots[slotIdx];
+    const data  = FINE_GRIDS[key];
+    const color = SLOT_COLORS[slotIdx];
+    const n     = data.grid.length;
+    const rect  = canvas.getBoundingClientRect();
     const j = Math.floor((e.clientX - rect.left) / rect.width  * n);
     const i = Math.floor((e.clientY - rect.top)  / rect.height * n);
     if (i < 0 || i >= n || j < 0 || j >= n) return;
@@ -202,32 +304,82 @@ function initHeatmap(canvasId, pctId, data, key, color, invert=false) {
 
     if (map.getSource('perturbed')) {
       map.getSource('perturbed').setData({
-        type:'FeatureCollection',
-        features:[{
-          type:'Feature', properties:{color},
-          geometry:{type:'LineString', coordinates:gcCoords(nVec)}
-        }]
+        type: 'FeatureCollection',
+        features: [{ type: 'Feature', properties: { color },
+                     geometry: { type: 'LineString', coordinates: gcCoords(nVec) } }]
       });
     }
-    clickResult.textContent = `${key}: ${fmt(frac)}  ·  ${poleStr(tDeg, pDeg)}`;
+    clickResult.textContent = `${EXPERIMENTS[key].label}: ${expFmt(key, frac)}  ·  ${poleStr(tDeg, pDeg)}`;
     clickResult.style.display = 'block';
-
-    drawHeatmap(canvasId, data, {i_f: i, j_f: j, color});
-    const otherCanvas = canvasId === 'hm-wet' ? 'hm-dry' : 'hm-wet';
-    const otherData   = FINE_GRIDS[key === 'wettest' ? 'driest' : 'wettest'];
-    drawHeatmap(otherCanvas, otherData, null);
+    drawHeatmap(canvasId, data, { i_f: i, j_f: j, color });
+    const other = 1 - slotIdx;
+    drawHeatmap(`hm-${other}`, FINE_GRIDS[slots[other]], null);
   });
 }
 
 function initHeatmaps() {
   if (!FINE_GRIDS) return;
-  document.getElementById('heatmaps').style.display = 'block';
-  drawHeatmap('hm-wet', FINE_GRIDS.wettest);
-  drawHeatmap('hm-dry', FINE_GRIDS.driest);
-  initHeatmap('hm-wet', 'hm-wet-pct', FINE_GRIDS.wettest, 'wettest', '#00e5ff', false);
-  initHeatmap('hm-dry', 'hm-dry-pct', FINE_GRIDS.driest,  'driest',  '#ff1744', true);
+  renderHeatmaps();
+  initHeatmap(0);
+  initHeatmap(1);
 }
 
+// ── Summary rows ─────────────────────────────────────────────────────────────
+function renderSummaryRows() {
+  if (!FINE_GRIDS) return;
+  for (let i = 0; i < 2; i++) {
+    const key = slots[i];
+    const gd  = FINE_GRIDS[key];
+    document.getElementById(`slot-label-${i}`).textContent = EXPERIMENTS[key].label;
+    document.getElementById(`slot-pct-${i}`).textContent   = expFmt(key, gd.best_frac);
+  }
+}
+
+// ── Slot controls (radio groups in Map Selection) ────────────────────────────
+function buildSlotControls() {
+  const container = document.getElementById('slot-controls');
+  container.innerHTML = '';
+  const keys = Object.keys(EXPERIMENTS);
+
+  for (let si = 0; si < 2; si++) {
+    const group = document.createElement('div');
+    group.className = 'slot-radio-group';
+    const hdr = document.createElement('div');
+    hdr.className = 'slot-radio-header';
+    hdr.innerHTML = `<div class="slot-radio-bar" style="background:${SLOT_COLORS[si]}"></div>SLOT ${si + 1}`;
+    group.appendChild(hdr);
+
+    keys.forEach(key => {
+      const opt = document.createElement('div');
+      opt.className = 'slot-radio-option';
+      const id       = `radio-s${si}-${key}`;
+      const checked  = slots[si] === key;
+      const disabled = EXPERIMENTS[key].disabled || slots[1 - si] === key;
+      opt.innerHTML = `<input type="radio" name="slot${si}" id="${id}" value="${key}"
+                        ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+                       <label for="${id}">${EXPERIMENTS[key].label}</label>`;
+      opt.querySelector('input').addEventListener('change', ev => {
+        if (ev.target.checked) setSlot(si, key);
+      });
+      group.appendChild(opt);
+    });
+    container.appendChild(group);
+  }
+}
+
+// ── Set a slot ───────────────────────────────────────────────────────────────
+function setSlot(idx, key) {
+  slots[idx] = key;
+  renderSummaryRows();
+  if (FINE_GRIDS) renderHeatmaps();
+  if (map.isStyleLoaded()) {
+    renderSlotLayers();
+    renderPoleMarkers();
+  }
+  buildSlotControls();
+}
+
+// ── Swatch helper ─────────────────────────────────────────────────────────────
 function swatchHtml(color, dashed) {
   const bg = dashed
     ? `repeating-linear-gradient(90deg,${color} 0 5px,transparent 5px 9px)`
@@ -237,92 +389,89 @@ function swatchHtml(color, dashed) {
 }
 
 function poleStr(tDeg, pDeg) {
-  const lat = 90 - tDeg;
+  const lat  = 90 - tDeg;
   const latS = Math.abs(lat).toFixed(2) + (lat >= 0 ? '°N' : '°S');
   const lonS = pDeg.toFixed(2) + '°E';
   return `pole ${latS} ${lonS}`;
 }
 
-// ---------- Vector helpers ----------
-const dot  = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
-const vscale = (v,s) => v.map(x=>x*s);
-const vsub   = (a,b) => a.map((x,i)=>x-b[i]);
-const vnorm  = v => { const m=Math.sqrt(dot(v,v)); return v.map(x=>x/m); };
-const vcross = (a,b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+// ── Vector helpers ────────────────────────────────────────────────────────────
+const dot    = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+const vscale = (v, s) => v.map(x => x * s);
+const vsub   = (a, b) => a.map((x, i) => x - b[i]);
+const vnorm  = v => { const m = Math.sqrt(dot(v, v)); return v.map(x => x / m); };
+const vcross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
 
 function latlonToCart(latDeg, lonDeg) {
-  const la=latDeg*Math.PI/180, lo=lonDeg*Math.PI/180;
+  const la = latDeg * Math.PI / 180, lo = lonDeg * Math.PI / 180;
   return [Math.cos(la)*Math.cos(lo), Math.cos(la)*Math.sin(lo), Math.sin(la)];
 }
 
 function thetaPhiToNormal(tDeg, pDeg) {
-  const t=tDeg*Math.PI/180, p=pDeg*Math.PI/180;
+  const t = tDeg * Math.PI / 180, p = pDeg * Math.PI / 180;
   return [Math.sin(t)*Math.cos(p), Math.sin(t)*Math.sin(p), Math.cos(t)];
 }
 
 function normalToThetaPhi(n) {
-  let theta = Math.acos(Math.max(-1,Math.min(1,n[2])))*180/Math.PI;
-  let phi   = Math.atan2(n[1],n[0])*180/Math.PI;
+  let theta = Math.acos(Math.max(-1, Math.min(1, n[2]))) * 180 / Math.PI;
+  let phi   = Math.atan2(n[1], n[0]) * 180 / Math.PI;
   if (phi < 0) phi += 360;
   if (phi >= 180) { phi -= 180; theta = 180 - theta; }
   return [theta, phi];
 }
 
 function perturbNormal(n0, p) {
-  // Great circle nearest to n0 that passes through point p
   const proj = vsub(n0, vscale(p, dot(n0, p)));
-  return dot(proj,proj) < 1e-12 ? null : vnorm(proj);
+  return dot(proj, proj) < 1e-12 ? null : vnorm(proj);
 }
 
-function gcCoords(n, nPts=360) {
+function gcCoords(n, nPts = 360) {
   const ref = Math.abs(n[0]) < 0.9 ? [1,0,0] : [0,1,0];
-  const u = vnorm(vcross(n, ref));
-  const v = vcross(n, u);
+  const u   = vnorm(vcross(n, ref));
+  const v   = vcross(n, u);
   const raw = [];
-  for (let i=0; i<nPts; i++) {
-    const t = 2*Math.PI*i/nPts;
-    const px=Math.cos(t)*u[0]+Math.sin(t)*v[0];
-    const py=Math.cos(t)*u[1]+Math.sin(t)*v[1];
-    const pz=Math.cos(t)*u[2]+Math.sin(t)*v[2];
-    raw.push([Math.atan2(py,px)*180/Math.PI,
-              Math.asin(Math.max(-1,Math.min(1,pz)))*180/Math.PI]);
+  for (let i = 0; i < nPts; i++) {
+    const t = 2 * Math.PI * i / nPts;
+    const px = Math.cos(t)*u[0] + Math.sin(t)*v[0];
+    const py = Math.cos(t)*u[1] + Math.sin(t)*v[1];
+    const pz = Math.cos(t)*u[2] + Math.sin(t)*v[2];
+    raw.push([Math.atan2(py, px) * 180 / Math.PI,
+              Math.asin(Math.max(-1, Math.min(1, pz))) * 180 / Math.PI]);
   }
   raw.push(raw[0]);
-  // Unwrap longitude
-  const out=[raw[0]];
-  for (let i=1;i<raw.length;i++) {
-    let lon=raw[i][0];
-    const d=lon-out[out.length-1][0];
-    if (d>180) lon-=360; else if (d<-180) lon+=360;
-    out.push([lon,raw[i][1]]);
+  const out = [raw[0]];
+  for (let i = 1; i < raw.length; i++) {
+    let lon = raw[i][0];
+    const d = lon - out[out.length - 1][0];
+    if (d > 180) lon -= 360; else if (d < -180) lon += 360;
+    out.push([lon, raw[i][1]]);
   }
   return out;
 }
 
 function gridCoords(gd, thetaDeg, phiDeg) {
-  const offs=gd.offsets_deg, n=offs.length;
-  const range=offs[n-1]-offs[0];
-  const i_f=(thetaDeg-gd.theta_center_deg-offs[0])/range*(n-1);
-  const j_f=(phiDeg  -gd.phi_center_deg  -offs[0])/range*(n-1);
-  if (i_f<0||i_f>n-1||j_f<0||j_f>n-1) return null;
-  return {i_f, j_f};
+  const offs = gd.offsets_deg, n = offs.length;
+  const range = offs[n-1] - offs[0];
+  const i_f = (thetaDeg - gd.theta_center_deg - offs[0]) / range * (n - 1);
+  const j_f = (phiDeg   - gd.phi_center_deg   - offs[0]) / range * (n - 1);
+  if (i_f < 0 || i_f > n-1 || j_f < 0 || j_f > n-1) return null;
+  return { i_f, j_f };
 }
 
 function interpGrid(gd, thetaDeg, phiDeg) {
-  const offs=gd.offsets_deg, n=offs.length;
-  const dT=thetaDeg-gd.theta_center_deg, dP=phiDeg-gd.phi_center_deg;
-  const range=offs[n-1]-offs[0];
-  const i_f=(dT-offs[0])/range*(n-1);
-  const j_f=(dP-offs[0])/range*(n-1);
-  if (i_f<0||i_f>n-1||j_f<0||j_f>n-1) return null;
-  const i0=Math.floor(i_f), j0=Math.floor(j_f);
-  const i1=Math.min(i0+1,n-1), j1=Math.min(j0+1,n-1);
-  const di=i_f-i0, dj=j_f-j0;
-  return gd.grid[i0][j0]*(1-di)*(1-dj)+gd.grid[i0][j1]*(1-di)*dj
-        +gd.grid[i1][j0]*di*(1-dj)    +gd.grid[i1][j1]*di*dj;
+  const offs = gd.offsets_deg, n = offs.length;
+  const range = offs[n-1] - offs[0];
+  const i_f = (thetaDeg - gd.theta_center_deg - offs[0]) / range * (n - 1);
+  const j_f = (phiDeg   - gd.phi_center_deg   - offs[0]) / range * (n - 1);
+  if (i_f < 0 || i_f > n-1 || j_f < 0 || j_f > n-1) return null;
+  const i0 = Math.floor(i_f), j0 = Math.floor(j_f);
+  const i1 = Math.min(i0+1, n-1), j1 = Math.min(j0+1, n-1);
+  const di = i_f - i0, dj = j_f - j0;
+  return gd.grid[i0][j0]*(1-di)*(1-dj) + gd.grid[i0][j1]*(1-di)*dj
+       + gd.grid[i1][j0]*di*(1-dj)     + gd.grid[i1][j1]*di*dj;
 }
 
-// ---------- Style switcher
+// ── Style switcher ────────────────────────────────────────────────────────────
 const STYLES = [
   { label: 'Satellite',         url: 'mapbox://styles/mapbox/satellite-v9' },
   { label: 'Satellite + roads', url: 'mapbox://styles/mapbox/satellite-streets-v12' },
@@ -338,18 +487,17 @@ STYLES.forEach(s => {
   if (s.url === currentStyle) opt.selected = true;
   sel.appendChild(opt);
 });
-sel.addEventListener('change', () => map.setStyle(sel.value));
 document.getElementById('style-switcher').appendChild(sel);
 
-// Collapsible panel
+// ── Collapsible panel ─────────────────────────────────────────────────────────
 const panelBody = document.getElementById('panel-body');
 const chevron   = document.getElementById('panel-chevron');
 panelBody.style.maxHeight = '2000px';
 
-function updateMapPadding(panelOpen, animate=true) {
+function updateMapPadding(panelOpen, animate = true) {
   const panel    = document.getElementById('panel');
   const rightPad = panelOpen ? panel.offsetWidth + 20 : 0;
-  map.easeTo({ padding: { top:0, bottom:0, left:0, right:rightPad }, duration: animate ? 300 : 0 });
+  map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: rightPad }, duration: animate ? 300 : 0 });
 }
 
 document.getElementById('panel-title').addEventListener('click', () => {
@@ -359,45 +507,53 @@ document.getElementById('panel-title').addEventListener('click', () => {
   updateMapPadding(!collapsed);
 });
 
+['details', 'mapsel'].forEach(id => {
+  document.getElementById(`${id}-hdr`).addEventListener('click', () => {
+    const body    = document.getElementById(`${id}-body`);
+    const chev    = document.querySelector(`#${id}-hdr .sec-chevron`);
+    const opening = body.classList.toggle('open');
+    chev.textContent = opening ? '▾' : '▸';
+  });
+});
 
+// ── Map ───────────────────────────────────────────────────────────────────────
 mapboxgl.accessToken = 'pk.eyJ1IjoiZGF2aWRnZWR5ZSIsImEiOiJjbWtvejk5bWkwYnBxM3JxNTE0ZjN6ZmowIn0.CaVScVkAo9uhpyebGqaQNg';
 const map = new mapboxgl.Map({
   container: 'map',
-  style: 'mapbox://styles/mapbox/satellite-streets-v12',
+  style: currentStyle,
   projection: 'globe',
   center: [129, 0],
   zoom: 2.5,
 });
-// Shift the camera so [142,0] is centred in the area left of the panel.
-// jumpTo sets internal state before the first render frame — no visible jump.
 const _initPad = (document.getElementById('panel').offsetWidth || 240) + 20;
-map.jumpTo({ center:[129,0], zoom:2.5,
-              padding:{top:0,bottom:0,left:0,right:_initPad} });
+map.jumpTo({ center: [129, 0], zoom: 2.5, padding: { top: 0, bottom: 0, left: 0, right: _initPad } });
 map.addControl(new mapboxgl.NavigationControl(), 'top-left');
 
-// ---------- Perturbed circle click handler ----------
+// ── Perturbed circle & HUD ────────────────────────────────────────────────────
 const clickResult = document.getElementById('click-result');
 
 function clearPerturbed() {
   if (map.getSource('perturbed'))
-    map.getSource('perturbed').setData({type:'FeatureCollection',features:[]});
+    map.getSource('perturbed').setData({ type: 'FeatureCollection', features: [] });
   clickResult.style.display = 'none';
   if (FINE_GRIDS) {
-    drawHeatmap('hm-wet', FINE_GRIDS.wettest, null);
-    drawHeatmap('hm-dry', FINE_GRIDS.driest,  null);
+    drawHeatmap('hm-0', FINE_GRIDS[slots[0]], null);
+    drawHeatmap('hm-1', FINE_GRIDS[slots[1]], null);
   }
 }
 
 map.on('click', e => {
   if (e.originalEvent._handled) return;
   if (!FINE_GRIDS) return;
-  const clickPt = latlonToCart(e.lngLat.lat, e.lngLat.lng);
+  const clickPt  = latlonToCart(e.lngLat.lat, e.lngLat.lng);
   const features = [];
-  const parts   = [];
-  const hmHL    = {};
+  const parts    = [];
+  const hmHL     = {};
 
-  for (const [key, color] of [['wettest','#00e5ff'],['driest','#ff1744']]) {
-    const gd = FINE_GRIDS[key];
+  for (let si = 0; si < 2; si++) {
+    const key   = slots[si];
+    const color = SLOT_COLORS[si];
+    const gd    = FINE_GRIDS[key];
     const bestTheta = gd.theta_center_deg + gd.offsets_deg[gd.best_i];
     const bestPhi   = gd.phi_center_deg   + gd.offsets_deg[gd.best_j];
     const n0  = thetaPhiToNormal(bestTheta, bestPhi);
@@ -407,32 +563,26 @@ map.on('click', e => {
     const frac = interpGrid(gd, tn, pn);
     if (frac === null) continue;
     features.push({
-      type:'Feature',
-      properties:{ color },
-      geometry:{ type:'LineString', coordinates:gcCoords(n1) }
+      type: 'Feature', properties: { color },
+      geometry: { type: 'LineString', coordinates: gcCoords(n1) }
     });
-    const invert   = key === 'driest';
-    const bestDisp = invert ? `${((1-gd.best_frac)*100).toFixed(2)}% land`
-                            : `${(gd.best_frac*100).toFixed(2)}% ocean`;
-    const pertDisp = invert ? `${((1-frac)*100).toFixed(2)}% land`
-                            : `${(frac*100).toFixed(2)}% ocean`;
-    const label    = key === 'wettest' ? 'Wettest' : 'Driest';
-    parts.push(swatchHtml(color,false) + `${label} great circle: ${bestDisp}`
-             + `&ensp;` + swatchHtml(color,true) + pertDisp);
+    parts.push(swatchHtml(color, false) + `${EXPERIMENTS[key].label}: ${expFmt(key, gd.best_frac)}`
+             + `&ensp;` + swatchHtml(color, true) + expFmt(key, frac));
     const pos = gridCoords(gd, tn, pn);
-    if (pos) hmHL[key] = {...pos, color};
+    if (pos) hmHL[si] = { ...pos, color };
   }
 
   if (features.length === 0) { clearPerturbed(); return; }
-  map.getSource('perturbed').setData({type:'FeatureCollection',features});
+  map.getSource('perturbed').setData({ type: 'FeatureCollection', features });
   clickResult.innerHTML = parts.join('&ensp;&nbsp;·&ensp;&nbsp;');
   clickResult.style.display = 'block';
-  drawHeatmap('hm-wet', FINE_GRIDS.wettest, hmHL.wettest || null);
-  drawHeatmap('hm-dry', FINE_GRIDS.driest,  hmHL.driest  || null);
+  drawHeatmap('hm-0', FINE_GRIDS[slots[0]], hmHL[0] || null);
+  drawHeatmap('hm-1', FINE_GRIDS[slots[1]], hmHL[1] || null);
 });
 
-document.addEventListener('keydown', e => { if (e.key==='Escape') clearPerturbed(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') clearPerturbed(); });
 
+// ── North-up control ──────────────────────────────────────────────────────────
 class NorthUpControl {
   onAdd(map) {
     this._map = map;
@@ -440,7 +590,7 @@ class NorthUpControl {
     this._container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
     const btn = document.createElement('button');
     btn.title = 'Reset to north-up, no tilt';
-    btn.style.cssText = 'font-size:18px; font-weight:bold; width:30px; height:30px; cursor:pointer; background:rgba(255,255,255,0.9); border:none;';
+    btn.style.cssText = 'font-size:18px;font-weight:bold;width:30px;height:30px;cursor:pointer;background:rgba(255,255,255,0.9);border:none;';
     btn.textContent = '⬆';
     btn.addEventListener('click', () => map.easeTo({ bearing: 0, pitch: 0, duration: 300 }));
     this._container.appendChild(btn);
@@ -450,93 +600,102 @@ class NorthUpControl {
 }
 map.addControl(new NorthUpControl(), 'bottom-right');
 
-// ---------- Map layer setup (runs on every style load) ----------
+// ── Map layer setup ───────────────────────────────────────────────────────────
 let togglesBuilt = false;
+
+function renderSlotLayers() {
+  Object.keys(EXPERIMENTS).forEach(key => {
+    const layerId  = `${key}-fine`;
+    const slotIdx  = slots.indexOf(key);
+    if (!map.getLayer(layerId)) return;
+    if (slotIdx === -1) {
+      map.setLayoutProperty(layerId, 'visibility', 'none');
+    } else {
+      map.setLayoutProperty(layerId, 'visibility', 'visible');
+      map.setPaintProperty(layerId, 'line-color', SLOT_COLORS[slotIdx]);
+    }
+  });
+}
+
+function renderPoleMarkers() {
+  if (!map.getSource('poles') || !FINE_GRIDS) return;
+  const features = [];
+  slots.forEach((key, si) => {
+    const color = SLOT_COLORS[si];
+    const gd    = FINE_GRIDS[key];
+    const tDeg  = gd.theta_center_deg + gd.offsets_deg[gd.best_i];
+    const pDeg  = gd.phi_center_deg   + gd.offsets_deg[gd.best_j];
+    const lat   = 90 - tDeg;
+    for (const [lon, la] of [[pDeg, lat], [pDeg - 180, -lat]]) {
+      features.push({
+        type: 'Feature',
+        properties: { color, key, si },
+        geometry: { type: 'Point', coordinates: [lon, la] }
+      });
+    }
+  });
+  map.getSource('poles').setData({ type: 'FeatureCollection', features });
+}
 
 function setupMapLayers() {
   map.setFog({});
+  sel.addEventListener('change', () => map.setStyle(sel.value));
 
+  // Coarse lines — visibility driven by checkboxes
+  const coarseIds = LAYERS.filter(l => !l.id.endsWith('-fine')).map(l => l.id);
   LAYERS.forEach(l => {
     map.addSource(l.id, { type: 'geojson', data: DATA[l.id] });
-    const paint = {
-      'line-color':   l.color,
-      'line-width':   l.width,
-      'line-opacity': l.opacity,
-    };
+    const paint = { 'line-color': l.color, 'line-width': l.width, 'line-opacity': l.opacity };
     if (l.dashed) paint['line-dasharray'] = [5, 4];
     const chk = document.getElementById(`chk-${l.id}`);
+    const vis  = l.id.endsWith('-fine')
+      ? (slots.includes(l.id.replace('-fine', '')) ? 'visible' : 'none')
+      : (chk ? (chk.checked ? 'visible' : 'none') : (l.visible ? 'visible' : 'none'));
     map.addLayer({
       id: l.id, type: 'line', source: l.id, paint,
-      layout: {
-        'line-cap': l.dashed ? 'butt' : 'round',
-        'line-join': 'round',
-        'visibility': chk ? (chk.checked ? 'visible' : 'none') : (l.visible ? 'visible' : 'none'),
-      },
+      layout: { 'line-cap': l.dashed ? 'butt' : 'round', 'line-join': 'round', 'visibility': vis },
     });
   });
+  renderSlotLayers();
 
-  // Pole markers for the best fine results
+  // Pole markers
   if (FINE_GRIDS) {
-    const poleFeatures = [];
-    for (const [key, color] of [['wettest','#00e5ff'],['driest','#ff1744']]) {
-      const gd   = FINE_GRIDS[key];
-      const tDeg = gd.theta_center_deg + gd.offsets_deg[gd.best_i];
-      const pDeg = gd.phi_center_deg   + gd.offsets_deg[gd.best_j];
-      const lat  = 90 - tDeg;
-      for (const [lon, la] of [[pDeg, lat], [pDeg - 180, -lat]]) {
-        poleFeatures.push({
-          type:'Feature',
-          properties:{ color, label: key },
-          geometry:{ type:'Point', coordinates:[lon, la] }
-        });
-      }
-    }
-    map.addSource('poles', {
-      type:'geojson',
-      data:{type:'FeatureCollection', features:poleFeatures}
-    });
+    map.addSource('poles', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({
-      id:'poles', type:'symbol', source:'poles',
-      layout:{
-        'text-field': '+',
-        'text-size': 24,
+      id: 'poles', type: 'symbol', source: 'poles',
+      layout: {
+        'text-field': '+', 'text-size': 24,
         'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
-        'text-allow-overlap': true,
-        'text-ignore-placement': true,
+        'text-allow-overlap': true, 'text-ignore-placement': true,
       },
-      paint:{
+      paint: {
         'text-color': ['get', 'color'],
-        'text-halo-color': 'rgba(0,0,0,0.7)',
-        'text-halo-width': 1.5,
+        'text-halo-color': 'rgba(0,0,0,0.7)', 'text-halo-width': 1.5,
       }
     });
+    renderPoleMarkers();
 
     map.on('click', 'poles', e => {
       e.originalEvent._handled = true;
       const p   = e.features[0].properties;
       const [lon, lat] = e.features[0].geometry.coordinates;
-      const gd  = FINE_GRIDS[p.label];
-      const invert = p.label === 'driest';
-      const frac = invert
-        ? `${((1 - gd.best_frac) * 100).toFixed(2)}% land`
-        : `${(gd.best_frac * 100).toFixed(2)}% ocean`;
+      const gd  = FINE_GRIDS[p.key];
       const latS = Math.abs(lat).toFixed(2) + (lat >= 0 ? '°N' : '°S');
       const lonS = Math.abs(lon).toFixed(2) + (lon >= 0 ? '°E' : '°W');
       clickResult.textContent =
-        `${p.label} circle pole  ·  ${frac}  ·  ${latS} ${lonS}  ·  axis point equidistant from every point on the circle`;
+        `${EXPERIMENTS[p.key].label} pole  ·  ${expFmt(p.key, gd.best_frac)}  ·  ${latS} ${lonS}  ·  axis point equidistant from every point on the circle`;
       clickResult.style.display = 'block';
     });
     map.on('mousemove',  'poles', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'poles', () => { map.getCanvas().style.cursor = ''; });
   }
 
-  // Perturbed circle source + layer
-  map.addSource('perturbed', { type:'geojson', data:{type:'FeatureCollection',features:[]} });
+  // Perturbed circle
+  map.addSource('perturbed', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({
-    id:'perturbed', type:'line', source:'perturbed',
-    paint:{ 'line-color':['get','color'], 'line-width':2.5,
-             'line-opacity':0.9, 'line-dasharray':[6,4] },
-    layout:{ 'line-cap':'butt', 'line-join':'round' }
+    id: 'perturbed', type: 'line', source: 'perturbed',
+    paint: { 'line-color': ['get', 'color'], 'line-width': 2.5, 'line-opacity': 0.9, 'line-dasharray': [6, 4] },
+    layout: { 'line-cap': 'butt', 'line-join': 'round' }
   });
 
   // Hover tooltip
@@ -554,29 +713,28 @@ function setupMapLayers() {
     });
   });
 
-  // Toggles — built once, persist across style switches
+  // Layer toggles — coarse lines only, built once
   if (!togglesBuilt) {
     const container = document.getElementById('toggles');
-    LAYERS.forEach(l => {
+    LAYERS.filter(l => !l.id.endsWith('-fine')).forEach(l => {
       const div = document.createElement('div');
       div.className = 'row';
-      const swatchH = l.id.endsWith('-fine') ? 5 : l.id.endsWith('-best') ? 3 : 2;
+      const h = l.id.endsWith('-best') ? 3 : 2;
       div.innerHTML = `
         <input type="checkbox" id="chk-${l.id}" ${l.visible ? 'checked' : ''}>
         <div class="swatch${l.dashed ? ' dashed' : ''}"
-             style="background:${l.color}; --c:${l.color}; height:${swatchH}px"></div>
+             style="background:${l.color}; --c:${l.color}; height:${h}px"></div>
         <label for="chk-${l.id}">${l.label}</label>`;
-      div.querySelector('input').addEventListener('change', e =>
-        map.setLayoutProperty(l.id, 'visibility', e.target.checked ? 'visible' : 'none'));
+      div.querySelector('input').addEventListener('change', ev =>
+        map.setLayoutProperty(l.id, 'visibility', ev.target.checked ? 'visible' : 'none'));
       container.appendChild(div);
     });
     togglesBuilt = true;
   }
 }
 
-// ---------- Boot: wait for both style and data ----------
-let styleReady = false;
-let dataReady  = false;
+// ── Boot ──────────────────────────────────────────────────────────────────────
+let styleReady = false, dataReady = false;
 
 map.on('style.load', () => {
   styleReady = true;
@@ -590,6 +748,8 @@ fetch('visuals.json')
     LAYERS     = d.layer_meta;
     FINE_GRIDS = d.fine_grids;
     dataReady  = true;
+    renderSummaryRows();
+    buildSlotControls();
     if (styleReady) setupMapLayers();
     initHeatmaps();
   })
