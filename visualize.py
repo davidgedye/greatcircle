@@ -5,7 +5,7 @@ visualize.py — Generate results.html: an interactive 3D globe showing great ci
 import json
 import numpy as np
 
-MAPBOX_TOKEN = 'pk.eyJ1IjoiZGF2aWRnZWR5ZSIsImEiOiJjbWtvejk5bWkwYnBxM3JxNTE0ZjN6ZmowIn0.CaVScVkAo9uhpyebGqaQNg'
+from config import MAPBOX_TOKEN
 
 # ---------- Results from the search run ----------
 
