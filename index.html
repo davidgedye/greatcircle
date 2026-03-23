@@ -255,9 +255,9 @@ let DATA, LAYERS, BEST_FRACS, FINE_GRIDS, BOUNDARIES, FINE_BOUNDARIES;
 
 // ── Datasets ──────────────────────────────────────────────────────────────────
 const DATASETS = [
-  { label: 'ETOPO1',     url: 'etopo1_visuals.json', detailsUrl: 'etopo1_details.json', hasLakes: false,
+  { label: 'ETOPO1',     url: 'experiments/wettest_driest/etopo1_visuals.json', detailsUrl: 'experiments/wettest_driest/etopo1_details.json', hasLakes: false,
     tooltip: 'ETOPO1\nNOAA global relief model\nIce-surface topography · 1 arc-minute (~1.85 km)' },
-  { label: 'GEBCO 2025', url: 'gebco_visuals.json',  detailsUrl: 'gebco_details.json', hasLakes: true,
+  { label: 'GEBCO 2025', url: 'experiments/wettest_driest/gebco_visuals.json',  detailsUrl: 'experiments/wettest_driest/gebco_details.json', hasLakes: true,
     tooltip: 'GEBCO 2025\nGeneral Bathymetric Chart of the Oceans\nSub-ice bed topography · 15 arc-second (~450 m)' },
 ];
 let activeDataset = 0;

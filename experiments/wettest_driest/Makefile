@@ -4,9 +4,7 @@ LAKES_SHP  = ../../data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10_shp/HydroL
 LAKES_MASK = ../../data/lakes_mask.npy
 WORKERS    = 8
 PTS        = 86400
-WEBROOT    = ../..
-
-all: $(WEBROOT)/gebco_visuals.json $(WEBROOT)/etopo1_visuals.json
+all: gebco_visuals.json etopo1_visuals.json
 
 # ── Preprocessing ────────────────────────────────────────────────────────────
 
@@ -48,15 +46,13 @@ etopo1-with-boundaries.json: etopo1.json add_boundaries.py
 
 # ── Visualisation ────────────────────────────────────────────────────────────
 
-$(WEBROOT)/gebco_visuals.json $(WEBROOT)/gebco_details.json: results-with-boundaries.json visualize.py
-	python3 visualize.py \
-	    --output $(WEBROOT)/gebco_visuals.json \
-	    --details-output $(WEBROOT)/gebco_details.json
+gebco_visuals.json gebco_details.json: results-with-boundaries.json visualize.py
+	python3 visualize.py
 
-$(WEBROOT)/etopo1_visuals.json $(WEBROOT)/etopo1_details.json: etopo1-with-boundaries.json visualize.py
+etopo1_visuals.json etopo1_details.json: etopo1-with-boundaries.json visualize.py
 	python3 visualize.py --input etopo1.json \
-	    --output $(WEBROOT)/etopo1_visuals.json \
-	    --details-output $(WEBROOT)/etopo1_details.json
+	    --output etopo1_visuals.json \
+	    --details-output etopo1_details.json
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,5 +73,5 @@ compare: etopo1.json results.json compare_datasets.py
 
 clean:
 	rm -f results.json results-with-boundaries.json etopo1-with-boundaries.json \
-	      $(WEBROOT)/gebco_visuals.json $(WEBROOT)/gebco_details.json \
-	      $(WEBROOT)/etopo1_visuals.json $(WEBROOT)/etopo1_details.json
+	      gebco_visuals.json gebco_details.json \
+	      etopo1_visuals.json etopo1_details.json
