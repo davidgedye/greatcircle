@@ -193,8 +193,8 @@ let slots = ['wettest', 'driest'];
 const EXPERIMENTS = {
   'wettest':        { label: 'Wettest (oceans only)',     invert: false },
   'driest':         { label: 'Driest (oceans only)',      invert: true  },
-  'wettest-lakes':  { label: 'Wettest (oceans & lakes)',  invert: false, disabled: true },
-  'driest-lakes':   { label: 'Driest (oceans & lakes)',   invert: true,  disabled: true },
+  'wettest-lakes':  { label: 'Wettest (oceans & lakes)',  invert: false },
+  'driest-lakes':   { label: 'Driest (oceans & lakes)',   invert: true  },
 };
 
 function expFmt(key, frac) {
@@ -344,26 +344,58 @@ function buildSlotControls() {
   for (let si = 0; si < 2; si++) {
     const group = document.createElement('div');
     group.className = 'slot-radio-group';
+
     const hdr = document.createElement('div');
     hdr.className = 'slot-radio-header';
-    hdr.innerHTML = `<div class="slot-radio-bar" style="background:${SLOT_COLORS[si]}"></div>SLOT ${si + 1}`;
+    const bar = document.createElement('div');
+    bar.className = 'slot-radio-bar';
+    bar.style.background = SLOT_COLORS[si];
+    hdr.appendChild(bar);
+    hdr.appendChild(document.createTextNode(`SLOT ${si + 1}`));
     group.appendChild(hdr);
 
     keys.forEach(key => {
+      const disabled = !!EXPERIMENTS[key].disabled;
+
       const opt = document.createElement('div');
       opt.className = 'slot-radio-option';
-      const id       = `radio-s${si}-${key}`;
-      const checked  = slots[si] === key;
-      const disabled = EXPERIMENTS[key].disabled || slots[1 - si] === key;
-      opt.innerHTML = `<input type="radio" name="slot${si}" id="${id}" value="${key}"
-                        ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
-                       <label for="${id}">${EXPERIMENTS[key].label}</label>`;
-      opt.querySelector('input').addEventListener('change', ev => {
-        if (ev.target.checked) setSlot(si, key);
-      });
+
+      const radio = document.createElement('input');
+      radio.type     = 'radio';
+      radio.name     = `slot${si}`;
+      radio.id       = `radio-s${si}-${key}`;
+      radio.value    = key;
+      radio.checked  = slots[si] === key;
+      radio.disabled = disabled;
+
+      const lbl = document.createElement('label');
+      lbl.htmlFor     = radio.id;
+      lbl.textContent = EXPERIMENTS[key].label;
+
+      opt.appendChild(radio);
+      opt.appendChild(lbl);
+
+      if (!disabled) {
+        opt.addEventListener('click', () => {
+          if (slots[si] === key) return;          // already selected
+          const other = 1 - si;
+          if (slots[other] === key) setSlot(other, slots[si]);
+          setSlot(si, key);
+        });
+      }
+
       group.appendChild(opt);
     });
     container.appendChild(group);
+  }
+}
+
+function updateSlotControls() {
+  for (let si = 0; si < 2; si++) {
+    Object.keys(EXPERIMENTS).forEach(key => {
+      const el = document.getElementById(`radio-s${si}-${key}`);
+      if (el) el.checked = slots[si] === key;
+    });
   }
 }
 
@@ -376,7 +408,7 @@ function setSlot(idx, key) {
     renderSlotLayers();
     renderPoleMarkers();
   }
-  buildSlotControls();
+  updateSlotControls();
 }
 
 // ── Swatch helper ─────────────────────────────────────────────────────────────

@@ -71,13 +71,10 @@ def rasterize_lakes(shp_path, nlat, nlon, lat_min, lat_max, lon_min, lon_max, ou
             band_lat_max = lat_min + (band_end_row - 1) * dlat + dlat / 2
             band_box = box(west, band_lat_min, east, band_lat_max)
 
-            # Collect polygons that intersect this band
+            # Collect polygons that intersect this band using spatial index
             geoms = []
-            src.seek(0)
-            for feat in src:
+            for feat in src.filter(bbox=(west, band_lat_min, east, band_lat_max)):
                 geom = shape(feat["geometry"])
-                if geom.bounds[1] > band_lat_max or geom.bounds[3] < band_lat_min:
-                    continue
                 clipped = geom.intersection(band_box)
                 if not clipped.is_empty:
                     geoms.append(clipped)

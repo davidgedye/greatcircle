@@ -1,4 +1,4 @@
-GEBCO      = data/GEBCO_2025_sub_ice.nc
+GEBCO      = data/GEBCO/GEBCO_2025_sub_ice.nc
 LAKES_SHP  = data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp
 LAKES_MASK = data/lakes_mask.npy
 WORKERS    = 8

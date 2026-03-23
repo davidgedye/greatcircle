@@ -395,11 +395,11 @@ def report(results: list[tuple[float, float, float]], label: str, top_n: int = 1
 # ---------------------------------------------------------------------------
 
 def sanity_check(mask: np.ndarray, grid: dict):
-    """Quick check: the equator should be ~71% ocean."""
+    """Quick check: sample the ocean fraction along the equator."""
     n = normal_to_cartesian(np.pi / 2, 0.0)  # theta=90°, phi=0° → equator
     pts = great_circle_points(n)
     frac = sample_ocean_fraction(pts, mask, grid)
-    print(f"\nSanity check — equator ocean fraction: {frac:.3f}  (expect ~0.71)")
+    print(f"\nSanity check — equator ocean fraction: {frac:.3f}")
 
 
 # ---------------------------------------------------------------------------
@@ -432,13 +432,15 @@ def main():
 
     if args.lakes_mask:
         print(f"Loading lakes mask from {args.lakes_mask} ...")
-        lakes = np.load(args.lakes_mask)
+        lakes = np.load(args.lakes_mask, mmap_mode='r')
         if lakes.shape != mask.shape:
             raise ValueError(f"Lakes mask shape {lakes.shape} != GEBCO mask shape {mask.shape}")
-        mask = np.where(lakes, np.int8(1), mask)
-        added = int(lakes.sum()) - int((mask & lakes).sum() - lakes.sum() + lakes.sum())
+        before = int(mask.sum())
+        mask |= lakes   # in-place OR reads mmap in chunks — peak RAM stays low
+        del lakes       # release mmap
+        added = int(mask.sum()) - before
         print(f"  Combined water fraction: {mask.mean():.3f}  "
-              f"(lake-only cells added: {(lakes & (mask == 1)).sum() - (mask & ~lakes).sum():,})")
+              f"(lake-only cells added: {added:,})")
         wet_key = "wettest-lakes"
         dry_key = "driest-lakes"
     else:
