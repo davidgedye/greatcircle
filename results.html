@@ -157,21 +157,21 @@
       <span>DETAILS</span><span class="sec-chevron">▸</span>
     </div>
     <div class="section-body" id="details-body">
+      <div id="toggles"></div>
       <div id="heatmaps">
         <div class="hm-pair">
           <div class="hm-block">
             <div class="hm-label" id="hm-0-label"></div>
-            <canvas class="heatmap" id="hm-0" width="165" height="165"></canvas>
+            <canvas class="heatmap" id="hm-0" width="160" height="160"></canvas>
             <div class="hm-pct" id="hm-0-pct"></div>
           </div>
           <div class="hm-block">
             <div class="hm-label" id="hm-1-label"></div>
-            <canvas class="heatmap" id="hm-1" width="165" height="165"></canvas>
+            <canvas class="heatmap" id="hm-1" width="160" height="160"></canvas>
             <div class="hm-pct" id="hm-1-pct"></div>
           </div>
         </div>
       </div>
-      <div id="toggles"></div>
     </div>
 
   </div><!-- /panel-body -->
@@ -273,25 +273,6 @@ function initHeatmap(idx) {
   const canvas   = document.getElementById(canvasId);
   const pct      = document.getElementById(pctId);
 
-  canvas.addEventListener('mousemove', e => {
-    const key  = ACTIVE()[idx];
-    const data = FINE_GRIDS[key];
-    const n    = data.grid.length;
-    const rect = canvas.getBoundingClientRect();
-    const j = Math.floor((e.clientX - rect.left) / rect.width  * n);
-    const i = Math.floor((e.clientY - rect.top)  / rect.height * n);
-    if (i >= 0 && i < n && j >= 0 && j < n) {
-      const val  = data.grid[i][j];
-      const tDeg = data.theta_center_deg + data.offsets_deg[i];
-      const pDeg = data.phi_center_deg   + data.offsets_deg[j];
-      pct.textContent = expFmt(key, val) + `  (${poleStr(tDeg, pDeg)})`;
-    }
-  });
-  canvas.addEventListener('mouseleave', () => {
-    const key = ACTIVE()[idx];
-    pct.textContent = expFmt(key, FINE_GRIDS[key].best_frac) + ' (best)';
-  });
-
   canvas.addEventListener('click', e => {
     const key   = ACTIVE()[idx];
     const data  = FINE_GRIDS[key];
@@ -306,6 +287,7 @@ function initHeatmap(idx) {
     const pDeg = data.phi_center_deg   + data.offsets_deg[j];
     const nVec = thetaPhiToNormal(tDeg, pDeg);
     const frac = data.grid[i][j];
+    pct.textContent = expFmt(key, frac);
 
     if (map.getSource('perturbed')) {
       map.getSource('perturbed').setData({
@@ -476,24 +458,39 @@ document.getElementById('panel-title').addEventListener('click', () => {
   updateMapPadding(!collapsed);
 });
 
+let detailsEverOpened = false;
 document.getElementById('details-hdr').addEventListener('click', () => {
   const body    = document.getElementById('details-body');
   const chev    = document.querySelector('#details-hdr .sec-chevron');
   const opening = body.classList.toggle('open');
   chev.textContent = opening ? '▾' : '▸';
+  if (opening && !detailsEverOpened) {
+    detailsEverOpened = true;
+    document.querySelectorAll('#toggles input[type=checkbox]').forEach(chk => { chk.checked = true; });
+    coarseShow['wet-coarse'] = true;
+    coarseShow['dry-coarse'] = true;
+    if (dataReady && styleReady) applyCoarseVisibility();
+  }
 });
 
 // ── Map ───────────────────────────────────────────────────────────────────────
 mapboxgl.accessToken = 'pk.eyJ1IjoiZGF2aWRnZWR5ZSIsImEiOiJjbWtvejk5bWkwYnBxM3JxNTE0ZjN6ZmowIn0.CaVScVkAo9uhpyebGqaQNg';
+const _initPad = (document.getElementById('right-col').offsetWidth || 240) + 20;
+function initialZoom() {
+  const w = window.innerWidth - _initPad;
+  const h = window.innerHeight;
+  const tighter = Math.min(w, h);
+  // Globe diameter ≈ 512 * 2^z / π; solve for 80% of tighter dimension
+  return Math.log2(0.8 * tighter * Math.PI / 512);
+}
 const map = new mapboxgl.Map({
   container: 'map',
   style: currentStyle,
   projection: 'globe',
   center: [129, 0],
-  zoom: 2.5,
+  zoom: initialZoom(),
 });
-const _initPad = (document.getElementById('right-col').offsetWidth || 240) + 20;
-map.jumpTo({ center: [129, 0], zoom: 2.5, padding: { top: 0, bottom: 0, left: 0, right: _initPad } });
+map.jumpTo({ center: [129, 0], zoom: initialZoom(), padding: { top: 0, bottom: 0, left: 0, right: _initPad } });
 map.addControl(new mapboxgl.NavigationControl(), 'top-left');
 
 // ── Perturbed circle & HUD ────────────────────────────────────────────────────
