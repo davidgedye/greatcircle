@@ -29,16 +29,25 @@
   #panel-body { overflow: hidden; transition: max-height 0.25s ease, opacity 0.25s ease; }
   #panel-body.collapsed { max-height: 0 !important; opacity: 0; }
 
-  /* ── Summary rows (top of panel) ── */
+  /* ── Summary rows ── */
   #summary { margin-bottom: 4px; }
   .summary-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
   .summary-row + .summary-row { border-top: 1px solid #1e1e1e; }
-  .slot-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; opacity: 0.9; }
-  .slot-info { display: flex; flex-direction: column; gap: 1px; }
-  .slot-label { font-size: 11px; color: #bbb; }
-  .slot-pct   { font-size: 13px; font-weight: bold; }
+  .row-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; opacity: 0.9; }
+  .row-info { display: flex; flex-direction: column; gap: 1px; }
+  .row-lbl { font-size: 11px; color: #bbb; }
+  .row-pct { font-size: 13px; font-weight: bold; }
 
-  /* ── Collapsible sections ── */
+  /* ── Lakes checkbox ── */
+  #lakes-toggle {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 0 2px; font-size: 11px; color: #888;
+    cursor: pointer; border-top: 1px solid #1e1e1e; margin-top: 2px;
+  }
+  #lakes-toggle input { cursor: pointer; margin: 0; accent-color: #aaa; }
+  #lakes-toggle:hover { color: #ccc; }
+
+  /* ── Collapsible Details section ── */
   .section-hdr {
     display: flex; justify-content: space-between; align-items: center;
     font-size: 10px; color: #666; letter-spacing: 2px;
@@ -75,23 +84,10 @@
     border: 1px solid #333; border-radius: 2px; cursor: crosshair;
   }
 
-  /* ── Slot radio controls ── */
-  .slot-radio-group { margin-bottom: 12px; }
-  .slot-radio-header {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 10px; color: #888; letter-spacing: 1px; margin-bottom: 6px;
-  }
-  .slot-radio-bar { width: 22px; height: 4px; border-radius: 1px; flex-shrink: 0; }
-  .slot-radio-option { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
-  .slot-radio-option input { cursor: pointer; margin: 0; accent-color: #888; }
-  .slot-radio-option label { cursor: pointer; font-size: 11px; color: #ddd; }
-  .slot-radio-option input:disabled { cursor: default; }
-  .slot-radio-option input:disabled + label { cursor: default; }
-
   /* ── Style switcher ── */
   #style-switcher {
     display: flex; align-items: center;
-    margin-top: 10px; border-top: 1px solid #2a2a2a; padding-top: 10px;
+    padding: 8px 0 0; border-top: 1px solid #2a2a2a; margin-top: 4px;
   }
   #style-switcher select {
     flex: 1; background: #1a1a1a; color: #ccc; border: 1px solid #333;
@@ -125,22 +121,24 @@
   <h3 id="panel-title">GREAT CIRCLES <span id="panel-chevron">▾</span></h3>
   <div id="panel-body">
 
-    <!-- Summary: one row per slot -->
     <div id="summary">
       <div class="summary-row">
-        <div class="slot-swatch" id="slot-swatch-0" style="background:#00e5ff"></div>
-        <div class="slot-info">
-          <div class="slot-label" id="slot-label-0">–</div>
-          <div class="slot-pct"   id="slot-pct-0"   style="color:#00e5ff">–</div>
+        <div class="row-swatch" style="background:#00e5ff"></div>
+        <div class="row-info">
+          <div class="row-lbl">Wettest</div>
+          <div class="row-pct" id="wet-pct" style="color:#00e5ff">–</div>
         </div>
       </div>
       <div class="summary-row">
-        <div class="slot-swatch" id="slot-swatch-1" style="background:#ff1744"></div>
-        <div class="slot-info">
-          <div class="slot-label" id="slot-label-1">–</div>
-          <div class="slot-pct"   id="slot-pct-1"   style="color:#ff1744">–</div>
+        <div class="row-swatch" style="background:#ff1744"></div>
+        <div class="row-info">
+          <div class="row-lbl">Driest</div>
+          <div class="row-pct" id="dry-pct" style="color:#ff1744">–</div>
         </div>
       </div>
+      <label id="lakes-toggle">
+        <input type="checkbox" id="lakes-chk"> Include lakes
+      </label>
     </div>
 
     <!-- Details section -->
@@ -165,15 +163,8 @@
       <div id="toggles"></div>
     </div>
 
-    <!-- Map selection section -->
-    <div class="section-hdr" id="mapsel-hdr">
-      <span>MAP SELECTION</span><span class="sec-chevron">▸</span>
-    </div>
-    <div class="section-body" id="mapsel-body">
-      <div id="slot-controls"></div>
-      <div id="style-switcher">
-        <span style="font-size:10px;color:#888;letter-spacing:2px;margin-right:8px;">MAP</span>
-      </div>
+    <div id="style-switcher">
+      <span style="font-size:10px;color:#888;letter-spacing:2px;margin-right:8px;">MAP</span>
     </div>
 
   </div><!-- /panel-body -->
@@ -185,25 +176,23 @@
 <script>
 let DATA, LAYERS, FINE_GRIDS;
 
-// ── Slot state ──────────────────────────────────────────────────────────────
-const SLOT_COLORS = ['#00e5ff', '#ff1744'];
-let slots = ['wettest', 'driest'];
+// ── State ────────────────────────────────────────────────────────────────────
+const COLORS = ['#00e5ff', '#ff1744'];   // [wet=cyan, dry=red]
+let includeLakes = false;
 
-// Metadata per experiment key — extend as new experiments are added to visuals.json
-const EXPERIMENTS = {
-  'wettest':        { label: 'Wettest (oceans only)',     invert: false },
-  'driest':         { label: 'Driest (oceans only)',      invert: true  },
-  'wettest-lakes':  { label: 'Wettest (oceans & lakes)',  invert: false },
-  'driest-lakes':   { label: 'Driest (oceans & lakes)',   invert: true  },
-};
+const INVERT = { wettest: false, driest: true, 'wettest-lakes': false, 'driest-lakes': true };
+
+function WET()    { return includeLakes ? 'wettest-lakes' : 'wettest'; }
+function DRY()    { return includeLakes ? 'driest-lakes'  : 'driest';  }
+function ACTIVE() { return [WET(), DRY()]; }
 
 function expFmt(key, frac) {
-  return EXPERIMENTS[key].invert
+  return INVERT[key]
     ? `${((1 - frac) * 100).toFixed(2)}% land`
     : `${(frac * 100).toFixed(2)}% ocean`;
 }
 
-// ── Heatmap rendering ───────────────────────────────────────────────────────
+// ── Heatmap rendering ────────────────────────────────────────────────────────
 function heatColor(t) {
   const r = Math.round(255 * (1 - t) * (t < 0.5 ? 1 : 2 * (1 - t)));
   const g = Math.round(255 * Math.min(2 * t, 2 * (1 - t)) * 0.5);
@@ -251,25 +240,26 @@ function drawHeatmap(canvasId, data, highlight = null) {
 
 function renderHeatmaps() {
   if (!FINE_GRIDS) return;
+  const keys = ACTIVE();
   for (let i = 0; i < 2; i++) {
-    const key = slots[i];
+    const key = keys[i];
     const gd  = FINE_GRIDS[key];
     drawHeatmap(`hm-${i}`, gd);
-    document.getElementById(`hm-${i}-label`).textContent = EXPERIMENTS[key].label.toUpperCase();
+    document.getElementById(`hm-${i}-label`).textContent = i === 0 ? 'WETTEST' : 'DRIEST';
     const pctEl = document.getElementById(`hm-${i}-pct`);
     pctEl.textContent = expFmt(key, gd.best_frac) + ' (best)';
-    pctEl.style.color = SLOT_COLORS[i];
+    pctEl.style.color = COLORS[i];
   }
 }
 
-function initHeatmap(slotIdx) {
-  const canvasId = `hm-${slotIdx}`;
-  const pctId    = `hm-${slotIdx}-pct`;
+function initHeatmap(idx) {
+  const canvasId = `hm-${idx}`;
+  const pctId    = `hm-${idx}-pct`;
   const canvas   = document.getElementById(canvasId);
   const pct      = document.getElementById(pctId);
 
   canvas.addEventListener('mousemove', e => {
-    const key  = slots[slotIdx];
+    const key  = ACTIVE()[idx];
     const data = FINE_GRIDS[key];
     const n    = data.grid.length;
     const rect = canvas.getBoundingClientRect();
@@ -283,14 +273,14 @@ function initHeatmap(slotIdx) {
     }
   });
   canvas.addEventListener('mouseleave', () => {
-    const key = slots[slotIdx];
+    const key = ACTIVE()[idx];
     pct.textContent = expFmt(key, FINE_GRIDS[key].best_frac) + ' (best)';
   });
 
   canvas.addEventListener('click', e => {
-    const key   = slots[slotIdx];
+    const key   = ACTIVE()[idx];
     const data  = FINE_GRIDS[key];
-    const color = SLOT_COLORS[slotIdx];
+    const color = COLORS[idx];
     const n     = data.grid.length;
     const rect  = canvas.getBoundingClientRect();
     const j = Math.floor((e.clientX - rect.left) / rect.width  * n);
@@ -309,11 +299,10 @@ function initHeatmap(slotIdx) {
                      geometry: { type: 'LineString', coordinates: gcCoords(nVec) } }]
       });
     }
-    clickResult.textContent = `${EXPERIMENTS[key].label}: ${expFmt(key, frac)}  ·  ${poleStr(tDeg, pDeg)}`;
+    clickResult.textContent = `${idx === 0 ? 'Wettest' : 'Driest'}: ${expFmt(key, frac)}  ·  ${poleStr(tDeg, pDeg)}`;
     clickResult.style.display = 'block';
     drawHeatmap(canvasId, data, { i_f: i, j_f: j, color });
-    const other = 1 - slotIdx;
-    drawHeatmap(`hm-${other}`, FINE_GRIDS[slots[other]], null);
+    drawHeatmap(`hm-${1 - idx}`, FINE_GRIDS[ACTIVE()[1 - idx]], null);
   });
 }
 
@@ -324,91 +313,23 @@ function initHeatmaps() {
   initHeatmap(1);
 }
 
-// ── Summary rows ─────────────────────────────────────────────────────────────
+// ── Summary rows ──────────────────────────────────────────────────────────────
 function renderSummaryRows() {
   if (!FINE_GRIDS) return;
-  for (let i = 0; i < 2; i++) {
-    const key = slots[i];
-    const gd  = FINE_GRIDS[key];
-    document.getElementById(`slot-label-${i}`).textContent = EXPERIMENTS[key].label;
-    document.getElementById(`slot-pct-${i}`).textContent   = expFmt(key, gd.best_frac);
-  }
+  document.getElementById('wet-pct').textContent = expFmt(WET(), FINE_GRIDS[WET()].best_frac);
+  document.getElementById('dry-pct').textContent = expFmt(DRY(), FINE_GRIDS[DRY()].best_frac);
 }
 
-// ── Slot controls (radio groups in Map Selection) ────────────────────────────
-function buildSlotControls() {
-  const container = document.getElementById('slot-controls');
-  container.innerHTML = '';
-  const keys = Object.keys(EXPERIMENTS);
-
-  for (let si = 0; si < 2; si++) {
-    const group = document.createElement('div');
-    group.className = 'slot-radio-group';
-
-    const hdr = document.createElement('div');
-    hdr.className = 'slot-radio-header';
-    const bar = document.createElement('div');
-    bar.className = 'slot-radio-bar';
-    bar.style.background = SLOT_COLORS[si];
-    hdr.appendChild(bar);
-    hdr.appendChild(document.createTextNode(`SLOT ${si + 1}`));
-    group.appendChild(hdr);
-
-    keys.forEach(key => {
-      const disabled = !!EXPERIMENTS[key].disabled;
-
-      const opt = document.createElement('div');
-      opt.className = 'slot-radio-option';
-
-      const radio = document.createElement('input');
-      radio.type     = 'radio';
-      radio.name     = `slot${si}`;
-      radio.id       = `radio-s${si}-${key}`;
-      radio.value    = key;
-      radio.checked  = slots[si] === key;
-      radio.disabled = disabled;
-
-      const lbl = document.createElement('label');
-      lbl.htmlFor     = radio.id;
-      lbl.textContent = EXPERIMENTS[key].label;
-
-      opt.appendChild(radio);
-      opt.appendChild(lbl);
-
-      if (!disabled) {
-        opt.addEventListener('click', () => {
-          if (slots[si] === key) return;          // already selected
-          const other = 1 - si;
-          if (slots[other] === key) setSlot(other, slots[si]);
-          setSlot(si, key);
-        });
-      }
-
-      group.appendChild(opt);
-    });
-    container.appendChild(group);
-  }
-}
-
-function updateSlotControls() {
-  for (let si = 0; si < 2; si++) {
-    Object.keys(EXPERIMENTS).forEach(key => {
-      const el = document.getElementById(`radio-s${si}-${key}`);
-      if (el) el.checked = slots[si] === key;
-    });
-  }
-}
-
-// ── Set a slot ───────────────────────────────────────────────────────────────
-function setSlot(idx, key) {
-  slots[idx] = key;
+// ── Lakes toggle ──────────────────────────────────────────────────────────────
+function setIncludeLakes(val) {
+  includeLakes = val;
   renderSummaryRows();
   if (FINE_GRIDS) renderHeatmaps();
+  clearPerturbed();
   if (map.isStyleLoaded()) {
-    renderSlotLayers();
+    renderActiveLayers();
     renderPoleMarkers();
   }
-  updateSlotControls();
 }
 
 // ── Swatch helper ─────────────────────────────────────────────────────────────
@@ -539,13 +460,11 @@ document.getElementById('panel-title').addEventListener('click', () => {
   updateMapPadding(!collapsed);
 });
 
-['details', 'mapsel'].forEach(id => {
-  document.getElementById(`${id}-hdr`).addEventListener('click', () => {
-    const body    = document.getElementById(`${id}-body`);
-    const chev    = document.querySelector(`#${id}-hdr .sec-chevron`);
-    const opening = body.classList.toggle('open');
-    chev.textContent = opening ? '▾' : '▸';
-  });
+document.getElementById('details-hdr').addEventListener('click', () => {
+  const body    = document.getElementById('details-body');
+  const chev    = document.querySelector('#details-hdr .sec-chevron');
+  const opening = body.classList.toggle('open');
+  chev.textContent = opening ? '▾' : '▸';
 });
 
 // ── Map ───────────────────────────────────────────────────────────────────────
@@ -569,8 +488,9 @@ function clearPerturbed() {
     map.getSource('perturbed').setData({ type: 'FeatureCollection', features: [] });
   clickResult.style.display = 'none';
   if (FINE_GRIDS) {
-    drawHeatmap('hm-0', FINE_GRIDS[slots[0]], null);
-    drawHeatmap('hm-1', FINE_GRIDS[slots[1]], null);
+    const [k0, k1] = ACTIVE();
+    drawHeatmap('hm-0', FINE_GRIDS[k0], null);
+    drawHeatmap('hm-1', FINE_GRIDS[k1], null);
   }
 }
 
@@ -581,10 +501,11 @@ map.on('click', e => {
   const features = [];
   const parts    = [];
   const hmHL     = {};
+  const active   = ACTIVE();
 
   for (let si = 0; si < 2; si++) {
-    const key   = slots[si];
-    const color = SLOT_COLORS[si];
+    const key   = active[si];
+    const color = COLORS[si];
     const gd    = FINE_GRIDS[key];
     const bestTheta = gd.theta_center_deg + gd.offsets_deg[gd.best_i];
     const bestPhi   = gd.phi_center_deg   + gd.offsets_deg[gd.best_j];
@@ -598,7 +519,8 @@ map.on('click', e => {
       type: 'Feature', properties: { color },
       geometry: { type: 'LineString', coordinates: gcCoords(n1) }
     });
-    parts.push(swatchHtml(color, false) + `${EXPERIMENTS[key].label}: ${expFmt(key, gd.best_frac)}`
+    const lbl = si === 0 ? 'Wettest' : 'Driest';
+    parts.push(swatchHtml(color, false) + `${lbl}: ${expFmt(key, gd.best_frac)}`
              + `&ensp;` + swatchHtml(color, true) + expFmt(key, frac));
     const pos = gridCoords(gd, tn, pn);
     if (pos) hmHL[si] = { ...pos, color };
@@ -608,8 +530,9 @@ map.on('click', e => {
   map.getSource('perturbed').setData({ type: 'FeatureCollection', features });
   clickResult.innerHTML = parts.join('&ensp;&nbsp;·&ensp;&nbsp;');
   clickResult.style.display = 'block';
-  drawHeatmap('hm-0', FINE_GRIDS[slots[0]], hmHL[0] || null);
-  drawHeatmap('hm-1', FINE_GRIDS[slots[1]], hmHL[1] || null);
+  const [k0, k1] = ACTIVE();
+  drawHeatmap('hm-0', FINE_GRIDS[k0], hmHL[0] || null);
+  drawHeatmap('hm-1', FINE_GRIDS[k1], hmHL[1] || null);
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') clearPerturbed(); });
@@ -635,16 +558,16 @@ map.addControl(new NorthUpControl(), 'bottom-right');
 // ── Map layer setup ───────────────────────────────────────────────────────────
 let togglesBuilt = false;
 
-function renderSlotLayers() {
-  Object.keys(EXPERIMENTS).forEach(key => {
-    const layerId  = `${key}-fine`;
-    const slotIdx  = slots.indexOf(key);
-    if (!map.getLayer(layerId)) return;
-    if (slotIdx === -1) {
-      map.setLayoutProperty(layerId, 'visibility', 'none');
+function renderActiveLayers() {
+  const active = ACTIVE();
+  LAYERS.filter(l => l.id.endsWith('-fine')).forEach(l => {
+    if (!map.getLayer(l.id)) return;
+    const idx = active.indexOf(l.id.replace('-fine', ''));
+    if (idx === -1) {
+      map.setLayoutProperty(l.id, 'visibility', 'none');
     } else {
-      map.setLayoutProperty(layerId, 'visibility', 'visible');
-      map.setPaintProperty(layerId, 'line-color', SLOT_COLORS[slotIdx]);
+      map.setLayoutProperty(l.id, 'visibility', 'visible');
+      map.setPaintProperty(l.id, 'line-color', COLORS[idx]);
     }
   });
 }
@@ -652,16 +575,17 @@ function renderSlotLayers() {
 function renderPoleMarkers() {
   if (!map.getSource('poles') || !FINE_GRIDS) return;
   const features = [];
-  slots.forEach((key, si) => {
-    const color = SLOT_COLORS[si];
+  ACTIVE().forEach((key, i) => {
+    const color = COLORS[i];
     const gd    = FINE_GRIDS[key];
     const tDeg  = gd.theta_center_deg + gd.offsets_deg[gd.best_i];
     const pDeg  = gd.phi_center_deg   + gd.offsets_deg[gd.best_j];
     const lat   = 90 - tDeg;
+    const label = i === 0 ? 'Wettest' : 'Driest';
     for (const [lon, la] of [[pDeg, lat], [pDeg - 180, -lat]]) {
       features.push({
         type: 'Feature',
-        properties: { color, key, si },
+        properties: { color, key, label },
         geometry: { type: 'Point', coordinates: [lon, la] }
       });
     }
@@ -673,22 +597,21 @@ function setupMapLayers() {
   map.setFog({});
   sel.addEventListener('change', () => map.setStyle(sel.value));
 
-  // Coarse lines — visibility driven by checkboxes
-  const coarseIds = LAYERS.filter(l => !l.id.endsWith('-fine')).map(l => l.id);
+  const active = ACTIVE();
   LAYERS.forEach(l => {
     map.addSource(l.id, { type: 'geojson', data: DATA[l.id] });
     const paint = { 'line-color': l.color, 'line-width': l.width, 'line-opacity': l.opacity };
     if (l.dashed) paint['line-dasharray'] = [5, 4];
     const chk = document.getElementById(`chk-${l.id}`);
-    const vis  = l.id.endsWith('-fine')
-      ? (slots.includes(l.id.replace('-fine', '')) ? 'visible' : 'none')
+    const vis = l.id.endsWith('-fine')
+      ? (active.includes(l.id.replace('-fine', '')) ? 'visible' : 'none')
       : (chk ? (chk.checked ? 'visible' : 'none') : (l.visible ? 'visible' : 'none'));
     map.addLayer({
       id: l.id, type: 'line', source: l.id, paint,
       layout: { 'line-cap': l.dashed ? 'butt' : 'round', 'line-join': 'round', 'visibility': vis },
     });
   });
-  renderSlotLayers();
+  renderActiveLayers();
 
   // Pole markers
   if (FINE_GRIDS) {
@@ -715,7 +638,7 @@ function setupMapLayers() {
       const latS = Math.abs(lat).toFixed(2) + (lat >= 0 ? '°N' : '°S');
       const lonS = Math.abs(lon).toFixed(2) + (lon >= 0 ? '°E' : '°W');
       clickResult.textContent =
-        `${EXPERIMENTS[p.key].label} pole  ·  ${expFmt(p.key, gd.best_frac)}  ·  ${latS} ${lonS}  ·  axis point equidistant from every point on the circle`;
+        `${p.label} pole  ·  ${expFmt(p.key, gd.best_frac)}  ·  ${latS} ${lonS}  ·  axis point equidistant from every point on the circle`;
       clickResult.style.display = 'block';
     });
     map.on('mousemove',  'poles', () => { map.getCanvas().style.cursor = 'pointer'; });
@@ -745,7 +668,7 @@ function setupMapLayers() {
     });
   });
 
-  // Layer toggles — coarse lines only, built once
+  // Layer toggles — coarse/best lines only, built once
   if (!togglesBuilt) {
     const container = document.getElementById('toggles');
     LAYERS.filter(l => !l.id.endsWith('-fine')).forEach(l => {
@@ -781,7 +704,7 @@ fetch('visuals.json')
     FINE_GRIDS = d.fine_grids;
     dataReady  = true;
     renderSummaryRows();
-    buildSlotControls();
+    document.getElementById('lakes-chk').addEventListener('change', e => setIncludeLakes(e.target.checked));
     if (styleReady) setupMapLayers();
     initHeatmaps();
   })
