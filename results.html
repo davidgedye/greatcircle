@@ -11,12 +11,24 @@
   body { background: #000; font-family: 'Courier New', monospace; }
   #map { position: absolute; inset: 0; }
 
+  /* ── Right column (stacks panel + map card) ── */
+  #right-col {
+    position: absolute; top: 16px; right: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
   /* ── Panel shell ── */
   #panel {
-    position: absolute; top: 16px; right: 16px;
     background: rgba(8,8,8,0.82); border: 1px solid #2a2a2a;
     border-radius: 8px; padding: 14px 16px; color: #ccc;
     font-size: 12px; min-width: 240px;
+    backdrop-filter: blur(6px);
+  }
+
+  /* ── Map card ── */
+  #map-card {
+    background: rgba(8,8,8,0.82); border: 1px solid #2a2a2a;
+    border-radius: 8px; padding: 8px 12px;
     backdrop-filter: blur(6px);
   }
   #panel h3 {
@@ -85,10 +97,7 @@
   }
 
   /* ── Style switcher ── */
-  #style-switcher {
-    display: flex; align-items: center;
-    padding: 8px 0 0; border-top: 1px solid #2a2a2a; margin-top: 4px;
-  }
+  #style-switcher { display: flex; align-items: center; }
   #style-switcher select {
     flex: 1; background: #1a1a1a; color: #ccc; border: 1px solid #333;
     border-radius: 4px; padding: 4px 6px; font-size: 12px; font-family: inherit; cursor: pointer;
@@ -116,6 +125,8 @@
 </head>
 <body>
 <div id="map"></div>
+
+<div id="right-col">
 
 <div id="panel">
   <h3 id="panel-title">GREAT CIRCLES <span id="panel-chevron">▾</span></h3>
@@ -150,12 +161,12 @@
         <div class="hm-pair">
           <div class="hm-block">
             <div class="hm-label" id="hm-0-label"></div>
-            <canvas class="heatmap" id="hm-0" width="220" height="220"></canvas>
+            <canvas class="heatmap" id="hm-0" width="165" height="165"></canvas>
             <div class="hm-pct" id="hm-0-pct"></div>
           </div>
           <div class="hm-block">
             <div class="hm-label" id="hm-1-label"></div>
-            <canvas class="heatmap" id="hm-1" width="220" height="220"></canvas>
+            <canvas class="heatmap" id="hm-1" width="165" height="165"></canvas>
             <div class="hm-pct" id="hm-1-pct"></div>
           </div>
         </div>
@@ -163,12 +174,16 @@
       <div id="toggles"></div>
     </div>
 
-    <div id="style-switcher">
-      <span style="font-size:10px;color:#888;letter-spacing:2px;margin-right:8px;">MAP</span>
-    </div>
-
   </div><!-- /panel-body -->
 </div><!-- /panel -->
+
+<div id="map-card">
+  <div id="style-switcher">
+    <span style="font-size:10px;color:#888;letter-spacing:2px;margin-right:8px;">MAP</span>
+  </div>
+</div><!-- /map-card -->
+
+</div><!-- /right-col -->
 
 <div id="tooltip"></div>
 <div id="click-result"></div>
@@ -326,9 +341,10 @@ function setIncludeLakes(val) {
   renderSummaryRows();
   if (FINE_GRIDS) renderHeatmaps();
   clearPerturbed();
-  if (map.isStyleLoaded()) {
+  if (styleReady) {
     renderActiveLayers();
     renderPoleMarkers();
+    applyCoarseVisibility();
   }
 }
 
@@ -448,8 +464,8 @@ const chevron   = document.getElementById('panel-chevron');
 panelBody.style.maxHeight = '2000px';
 
 function updateMapPadding(panelOpen, animate = true) {
-  const panel    = document.getElementById('panel');
-  const rightPad = panelOpen ? panel.offsetWidth + 20 : 0;
+  const col      = document.getElementById('right-col');
+  const rightPad = panelOpen ? col.offsetWidth + 20 : 0;
   map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: rightPad }, duration: animate ? 300 : 0 });
 }
 
@@ -476,7 +492,7 @@ const map = new mapboxgl.Map({
   center: [129, 0],
   zoom: 2.5,
 });
-const _initPad = (document.getElementById('panel').offsetWidth || 240) + 20;
+const _initPad = (document.getElementById('right-col').offsetWidth || 240) + 20;
 map.jumpTo({ center: [129, 0], zoom: 2.5, padding: { top: 0, bottom: 0, left: 0, right: _initPad } });
 map.addControl(new mapboxgl.NavigationControl(), 'top-left');
 
@@ -557,6 +573,22 @@ map.addControl(new NorthUpControl(), 'bottom-right');
 
 // ── Map layer setup ───────────────────────────────────────────────────────────
 let togglesBuilt = false;
+
+// Coarse visibility state — keyed by concept, not by experiment
+const coarseShow = { 'wet-coarse': false, 'dry-coarse': false };
+
+function applyCoarseVisibility() {
+  const [wetKey, dryKey] = ACTIVE();
+  // Build the map of which layer IDs should be visible
+  const shouldShow = {
+    [wetKey + '-coarse']: coarseShow['wet-coarse'],
+    [dryKey + '-coarse']: coarseShow['dry-coarse'],
+  };
+  LAYERS.filter(l => !l.id.endsWith('-fine')).forEach(l => {
+    if (!map.getLayer(l.id)) return;
+    map.setLayoutProperty(l.id, 'visibility', shouldShow[l.id] ? 'visible' : 'none');
+  });
+}
 
 function renderActiveLayers() {
   const active = ACTIVE();
@@ -668,24 +700,34 @@ function setupMapLayers() {
     });
   });
 
-  // Layer toggles — coarse/best lines only, built once
+  // Layer toggles — 4 concept rows, experiment-agnostic, built once
   if (!togglesBuilt) {
     const container = document.getElementById('toggles');
-    LAYERS.filter(l => !l.id.endsWith('-fine')).forEach(l => {
+    [
+      { concept: 'wet-coarse', label: 'Wettest 10 (coarse)', color: '#1565c0', h: 2 },
+      { concept: 'dry-coarse', label: 'Driest 10 (coarse)',  color: '#7f0000', h: 2 },
+    ].forEach(({ concept, label, color, h }) => {
       const div = document.createElement('div');
       div.className = 'row';
-      const h = l.id.endsWith('-best') ? 3 : 2;
-      div.innerHTML = `
-        <input type="checkbox" id="chk-${l.id}" ${l.visible ? 'checked' : ''}>
-        <div class="swatch${l.dashed ? ' dashed' : ''}"
-             style="background:${l.color}; --c:${l.color}; height:${h}px"></div>
-        <label for="chk-${l.id}">${l.label}</label>`;
-      div.querySelector('input').addEventListener('change', ev =>
-        map.setLayoutProperty(l.id, 'visibility', ev.target.checked ? 'visible' : 'none'));
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      const swatch = document.createElement('div');
+      swatch.className = 'swatch';
+      swatch.style.cssText = `background:${color};--c:${color};height:${h}px`;
+      const lbl = document.createElement('label');
+      lbl.textContent = label;
+      div.appendChild(chk);
+      div.appendChild(swatch);
+      div.appendChild(lbl);
+      chk.addEventListener('change', ev => {
+        coarseShow[concept] = ev.target.checked;
+        applyCoarseVisibility();
+      });
       container.appendChild(div);
     });
     togglesBuilt = true;
   }
+  applyCoarseVisibility();
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
