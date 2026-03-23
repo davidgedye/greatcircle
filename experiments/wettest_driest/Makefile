@@ -1,10 +1,11 @@
-GEBCO      = data/GEBCO/GEBCO_2025_sub_ice.nc
-LAKES_SHP  = data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp
-LAKES_MASK = data/lakes_mask.npy
+ETOPO1     = ../../data/ETOPO1_Ice_c_gdal.grd
+GEBCO      = ../../data/GEBCO/GEBCO_2025_sub_ice.nc
+LAKES_SHP  = ../../data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp
+LAKES_MASK = ../../data/lakes_mask.npy
 WORKERS    = 8
 PTS        = 86400
 
-all: visuals.json
+all: gebco_visuals.json gebco_details.json etopo1_visuals.json etopo1_details.json
 
 # ── Preprocessing ────────────────────────────────────────────────────────────
 
@@ -34,18 +35,44 @@ b = json.load(open('wettest-driest-including-lakes.json')); \
 a.update(b); \
 json.dump(a, open('results.json', 'w'))"
 
+# ── Boundaries ───────────────────────────────────────────────────────────────
+
+results-with-boundaries.json: results.json add_boundaries.py
+	python3 add_boundaries.py $(GEBCO) --lakes-mask $(LAKES_MASK) --pts $(PTS)
+	cp results.json results-with-boundaries.json
+
+etopo1-with-boundaries.json: etopo1.json add_boundaries.py
+	python3 add_boundaries.py $(ETOPO1) --results etopo1.json
+	cp etopo1.json etopo1-with-boundaries.json
+
 # ── Visualisation ────────────────────────────────────────────────────────────
 
-visuals.json: results.json visualize.py
+gebco_visuals.json gebco_details.json: results-with-boundaries.json visualize.py
 	python3 visualize.py
+
+etopo1_visuals.json etopo1_details.json: etopo1-with-boundaries.json visualize.py
+	python3 visualize.py --input etopo1.json \
+	    --output etopo1_visuals.json \
+	    --details-output etopo1_details.json
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-# Rebuild only the oceans-only results and regenerate visuals (skips lakes)
-oceans-only: wettest-driest.json
-	python3 visualize.py
+# ETOPO1 search (for cross-dataset comparison and side-by-side visualisation)
+etopo1.json: $(ETOPO1) great_circles.py
+	python3 great_circles.py $(ETOPO1) \
+	    --workers $(WORKERS) \
+	    --output $@
 
-.PHONY: all oceans-only clean
+# Cross-dataset comparison table
+compare: etopo1.json results.json compare_datasets.py
+	python3 compare_datasets.py $(ETOPO1) $(GEBCO) \
+	    --label-a ETOPO1 --label-b GEBCO \
+	    --results-a etopo1.json --results-b results.json \
+	    --workers $(WORKERS)
+
+.PHONY: all compare clean
 
 clean:
-	rm -f results.json visuals.json
+	rm -f results.json gebco_visuals.json gebco_details.json \
+	      etopo1_visuals.json etopo1_details.json \
+	      results-with-boundaries.json etopo1-with-boundaries.json

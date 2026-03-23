@@ -34,12 +34,8 @@
   #panel h3 {
     font-size: 11px; color: #888; margin-bottom: 10px; letter-spacing: 2px;
     border-bottom: 1px solid #2a2a2a; padding-bottom: 7px;
-    cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center;
   }
-  #panel h3:hover { color: #ccc; }
-  #panel-chevron { font-size: 33px; line-height: 1; }
-  #panel-body { overflow: hidden; transition: max-height 0.25s ease, opacity 0.25s ease; }
-  #panel-body.collapsed { max-height: 0 !important; opacity: 0; }
+  #panel-body { overflow: hidden; }
 
   /* ── Summary rows ── */
   #summary { margin-bottom: 4px; }
@@ -96,11 +92,74 @@
     border: 1px solid #333; border-radius: 2px; cursor: crosshair;
   }
 
+  /* ── Dataset switcher ── */
+  #dataset-switcher {
+    display: flex; gap: 6px; padding: 8px 0 6px; border-bottom: 1px solid #2a2a2a; margin-bottom: 4px;
+  }
+  #dataset-switcher button {
+    position: relative; flex: 1; background: #1a1a1a; color: #666; border: 1px solid #2a2a2a;
+    border-radius: 4px; padding: 4px 0; font-size: 10px; letter-spacing: 1px;
+    font-family: inherit; cursor: pointer; transition: color 0.15s, border-color 0.15s;
+  }
+  #dataset-switcher button.active { color: #ccc; border-color: #555; }
+  #dataset-switcher button:hover:not(.active) { color: #aaa; }
+  #dataset-switcher button::after {
+    content: attr(data-tooltip);
+    position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.92); border: 1px solid #444; color: #ccc;
+    font-size: 10px; letter-spacing: 0; line-height: 1.5; font-weight: normal;
+    padding: 6px 9px; border-radius: 4px; pointer-events: none;
+    opacity: 0; transition: opacity 0.15s; width: max-content; max-width: 220px;
+    white-space: normal; text-align: left; z-index: 10;
+  }
+  #dataset-switcher button:hover::after { opacity: 1; }
+  #dataset-switcher button:last-child::after { left: auto; right: 0; transform: none; }
+
   /* ── Style switcher ── */
   #style-switcher { display: flex; align-items: center; }
   #style-switcher select {
     flex: 1; background: #1a1a1a; color: #ccc; border: 1px solid #333;
     border-radius: 4px; padding: 4px 6px; font-size: 12px; font-family: inherit; cursor: pointer;
+  }
+
+  #mobile-hint { display: none; }
+
+  /* ── Mobile bottom bar ── */
+  @media (max-width: 640px) {
+    #right-col {
+      top: auto; bottom: 0; left: 0; right: 0;
+      flex-direction: row; align-items: stretch;
+      padding: 0; gap: 0;
+    }
+    #panel {
+      flex: 1; min-width: 0;
+      border-radius: 10px 0 0 0; border-bottom: none; border-right: none;
+      padding: 8px 12px;
+      display: flex; flex-direction: column; justify-content: center;
+    }
+    #map-card {
+      border-radius: 0 10px 0 0; border-bottom: none; border-left: none;
+      padding: 8px 12px;
+      display: flex; align-items: center;
+    }
+    #panel h3, .section-hdr, .section-body { display: none; }
+    #summary { display: flex; flex-direction: row; align-items: baseline; gap: 12px; margin: 0; }
+    .summary-row { padding: 0; flex-direction: row; align-items: baseline; gap: 5px; }
+    .summary-row + .summary-row { border-top: none; }
+    .row-info { flex-direction: row; align-items: baseline; gap: 5px; }
+    .row-swatch { display: none; }
+    .row-lbl { font-size: 10px; }
+    .row-pct { font-size: 13px; }
+    #mobile-hint {
+      display: block; margin-top: 3px;
+      font-size: 10px; color: #888; letter-spacing: 0.3px;
+    }
+    #style-switcher { flex-direction: column; gap: 4px; }
+    #style-switcher span { display: none; }
+    #style-switcher select { padding: 3px 4px; font-size: 10px; }
+    #tooltip, #click-result { display: none !important; }
+    .mapboxgl-ctrl-bottom-left,
+    .mapboxgl-ctrl-bottom-right { bottom: 60px !important; }
   }
 
   /* ── HUD overlays ── */
@@ -129,7 +188,7 @@
 <div id="right-col">
 
 <div id="panel">
-  <h3 id="panel-title">GREAT CIRCLES <span id="panel-chevron">▾</span></h3>
+  <h3 id="panel-title">GREAT CIRCLES</h3>
   <div id="panel-body">
 
     <div id="summary">
@@ -147,16 +206,19 @@
           <div class="row-pct" id="dry-pct" style="color:#ff1744">–</div>
         </div>
       </div>
-      <label id="lakes-toggle">
-        <input type="checkbox" id="lakes-chk"> Include lakes
-      </label>
     </div>
+
+    <div id="mobile-hint">More details available on a bigger screen</div>
 
     <!-- Details section -->
     <div class="section-hdr" id="details-hdr">
       <span>DETAILS</span><span class="sec-chevron">▸</span>
     </div>
     <div class="section-body" id="details-body">
+      <div id="dataset-switcher"></div>
+      <label id="lakes-toggle">
+        <input type="checkbox" id="lakes-chk"> Include lakes
+      </label>
       <div id="toggles"></div>
       <div id="heatmaps">
         <div class="hm-pair">
@@ -189,7 +251,16 @@
 <div id="click-result"></div>
 
 <script>
-let DATA, LAYERS, FINE_GRIDS;
+let DATA, LAYERS, BEST_FRACS, FINE_GRIDS, BOUNDARIES, FINE_BOUNDARIES;
+
+// ── Datasets ──────────────────────────────────────────────────────────────────
+const DATASETS = [
+  { label: 'ETOPO1',     url: 'etopo1_visuals.json', detailsUrl: 'etopo1_details.json', hasLakes: false,
+    tooltip: 'ETOPO1\nNOAA global relief model\nIce-surface topography · 1 arc-minute (~1.85 km)' },
+  { label: 'GEBCO 2025', url: 'gebco_visuals.json',  detailsUrl: 'gebco_details.json', hasLakes: true,
+    tooltip: 'GEBCO 2025\nGeneral Bathymetric Chart of the Oceans\nSub-ice bed topography · 15 arc-second (~450 m)' },
+];
+let activeDataset = 0;
 
 // ── State ────────────────────────────────────────────────────────────────────
 const COLORS = ['#00e5ff', '#ff1744'];   // [wet=cyan, dry=red]
@@ -312,9 +383,9 @@ function initHeatmaps() {
 
 // ── Summary rows ──────────────────────────────────────────────────────────────
 function renderSummaryRows() {
-  if (!FINE_GRIDS) return;
-  document.getElementById('wet-pct').textContent = expFmt(WET(), FINE_GRIDS[WET()].best_frac);
-  document.getElementById('dry-pct').textContent = expFmt(DRY(), FINE_GRIDS[DRY()].best_frac);
+  if (!BEST_FRACS) return;
+  document.getElementById('wet-pct').textContent = expFmt(WET(), BEST_FRACS[WET()]);
+  document.getElementById('dry-pct').textContent = expFmt(DRY(), BEST_FRACS[DRY()]);
 }
 
 // ── Lakes toggle ──────────────────────────────────────────────────────────────
@@ -327,6 +398,17 @@ function setIncludeLakes(val) {
     renderActiveLayers();
     renderPoleMarkers();
     applyCoarseVisibility();
+    ['wet', 'dry'].forEach((side, si) => {
+      const key = ACTIVE()[si];
+      if (BOUNDARIES) {
+        const src = map.getSource(`boundaries-${side}`);
+        if (src) src.setData(BOUNDARIES[key] || _emptyFC);
+      }
+      if (FINE_BOUNDARIES) {
+        const src = map.getSource(`fine-boundaries-${side}`);
+        if (src) src.setData(FINE_BOUNDARIES[key] || _emptyFC);
+      }
+    });
   }
 }
 
@@ -440,23 +522,6 @@ STYLES.forEach(s => {
 });
 document.getElementById('style-switcher').appendChild(sel);
 
-// ── Collapsible panel ─────────────────────────────────────────────────────────
-const panelBody = document.getElementById('panel-body');
-const chevron   = document.getElementById('panel-chevron');
-panelBody.style.maxHeight = '2000px';
-
-function updateMapPadding(panelOpen, animate = true) {
-  const col      = document.getElementById('right-col');
-  const rightPad = panelOpen ? col.offsetWidth + 20 : 0;
-  map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: rightPad }, duration: animate ? 300 : 0 });
-}
-
-document.getElementById('panel-title').addEventListener('click', () => {
-  const collapsed = panelBody.classList.toggle('collapsed');
-  chevron.textContent = collapsed ? '▸' : '▾';
-  if (!collapsed) panelBody.style.maxHeight = '2000px';
-  updateMapPadding(!collapsed);
-});
 
 let detailsEverOpened = false;
 document.getElementById('details-hdr').addEventListener('click', () => {
@@ -471,14 +536,23 @@ document.getElementById('details-hdr').addEventListener('click', () => {
     coarseShow['dry-coarse'] = true;
     if (dataReady && styleReady) applyCoarseVisibility();
   }
+  if (opening && dataReady && styleReady) {
+    loadAndApplyDetails();
+  } else if (styleReady) {
+    setBoundaryVisibility(false);
+  }
 });
 
 // ── Map ───────────────────────────────────────────────────────────────────────
 mapboxgl.accessToken = 'pk.eyJ1IjoiZGF2aWRnZWR5ZSIsImEiOiJjbWtvejk5bWkwYnBxM3JxNTE0ZjN6ZmowIn0.CaVScVkAo9uhpyebGqaQNg';
-const _initPad = (document.getElementById('right-col').offsetWidth || 240) + 20;
+const isMobile = window.matchMedia('(max-width: 640px)').matches;
+const _col = document.getElementById('right-col');
+const _initPad = isMobile
+  ? { top: 0, bottom: 100, left: 0, right: 0 }   // refined after paint
+  : { top: 0, bottom: 0, left: 0, right: (_col.offsetWidth || 240) + 20 };
 function initialZoom() {
-  const w = window.innerWidth - _initPad;
-  const h = window.innerHeight;
+  const w = isMobile ? window.innerWidth : window.innerWidth - _initPad.right;
+  const h = isMobile ? window.innerHeight - _initPad.bottom : window.innerHeight;
   const tighter = Math.min(w, h);
   // Globe diameter ≈ 512 * 2^z / π; solve for 80% of tighter dimension
   return Math.log2(0.8 * tighter * Math.PI / 512);
@@ -490,8 +564,13 @@ const map = new mapboxgl.Map({
   center: [129, 0],
   zoom: initialZoom(),
 });
-map.jumpTo({ center: [129, 0], zoom: initialZoom(), padding: { top: 0, bottom: 0, left: 0, right: _initPad } });
+map.jumpTo({ center: [129, 0], zoom: initialZoom(), padding: _initPad });
+if (isMobile) requestAnimationFrame(() => {
+  const h = _col.offsetHeight;
+  if (h) map.easeTo({ padding: { top: 0, bottom: h + 20, left: 0, right: 0 }, duration: 0 });
+});
 map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200, unit: 'metric' }), 'bottom-left');
 
 // ── Perturbed circle & HUD ────────────────────────────────────────────────────
 const clickResult = document.getElementById('click-result');
@@ -573,6 +652,14 @@ let togglesBuilt = false;
 
 // Coarse visibility state — keyed by concept, not by experiment
 const coarseShow = { 'wet-coarse': false, 'dry-coarse': false };
+
+const BOUNDARY_LAYER_IDS = ['boundaries-wet', 'boundaries-dry', 'fine-boundaries-wet', 'fine-boundaries-dry'];
+function setBoundaryVisibility(visible) {
+  const vis = visible ? 'visible' : 'none';
+  BOUNDARY_LAYER_IDS.forEach(id => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
+  });
+}
 
 function applyCoarseVisibility() {
   const [wetKey, dryKey] = ACTIVE();
@@ -682,6 +769,35 @@ function setupMapLayers() {
     layout: { 'line-cap': 'butt', 'line-join': 'round' }
   });
 
+  // Land/water boundary arrows
+  const _emptyFC = { type: 'FeatureCollection', features: [] };
+  function _arrowLayer(id, sourceId, color) {
+    return {
+      id, type: 'symbol', source: sourceId,
+      layout: {
+        'visibility': 'none',
+        'text-field': '▲',
+        'text-size': ['interpolate', ['linear'], ['zoom'], 0, 7, 4, 11, 8, 18],
+        'text-rotate': ['get', 'bearing'],
+        'text-rotation-alignment': 'map',
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+      },
+      paint: {
+        'text-color': color,
+        'text-halo-color': '#000',
+        'text-halo-width': 1.5,
+        'text-opacity': 0.9,
+      },
+    };
+  }
+  ['wet', 'dry'].forEach((side, si) => {
+    map.addSource(`boundaries-${side}`,      { type: 'geojson', data: _emptyFC });
+    map.addSource(`fine-boundaries-${side}`, { type: 'geojson', data: _emptyFC });
+    map.addLayer(_arrowLayer(`boundaries-${side}`,      `boundaries-${side}`,      COLORS[si]));
+    map.addLayer(_arrowLayer(`fine-boundaries-${side}`, `fine-boundaries-${side}`, COLORS[si]));
+  });
+
   // Hover tooltip
   const tip = document.getElementById('tooltip');
   LAYERS.forEach(l => {
@@ -732,22 +848,118 @@ let styleReady = false, dataReady = false;
 
 map.on('style.load', () => {
   styleReady = true;
-  if (dataReady) setupMapLayers();
+  if (dataReady) {
+    setupMapLayers();
+    const detailsOpen = document.getElementById('details-body').classList.contains('open');
+    if (detailsOpen) loadAndApplyDetails();
+  }
 });
 
-fetch('visuals.json')
+function applyDataset(d) {
+  DATA        = d.layers;
+  LAYERS      = d.layer_meta;
+  BEST_FRACS  = d.best_fracs || null;
+  FINE_GRIDS      = null;
+  BOUNDARIES      = null;
+  FINE_BOUNDARIES = null;
+}
+
+const detailsCache = {};
+
+function applyDetails(d) {
+  FINE_GRIDS      = d.fine_grids      || null;
+  BOUNDARIES      = d.boundaries      || null;
+  FINE_BOUNDARIES = d.fine_boundaries || null;
+}
+
+function ensureDetails(idx) {
+  if (detailsCache[idx]) return Promise.resolve(detailsCache[idx]);
+  return fetch(DATASETS[idx].detailsUrl)
+    .then(r => r.json())
+    .then(d => { detailsCache[idx] = d; return d; });
+}
+
+function loadAndApplyDetails() {
+  ensureDetails(activeDataset).then(d => {
+    applyDetails(d);
+    const empty = { type: 'FeatureCollection', features: [] };
+    ['wet', 'dry'].forEach((side, si) => {
+      const key = ACTIVE()[si];
+      const src  = map.getSource(`boundaries-${side}`);
+      const fsrc = map.getSource(`fine-boundaries-${side}`);
+      if (src)  src.setData((BOUNDARIES      && BOUNDARIES[key])      || empty);
+      if (fsrc) fsrc.setData((FINE_BOUNDARIES && FINE_BOUNDARIES[key]) || empty);
+    });
+    renderHeatmaps();
+    renderPoleMarkers();
+    setBoundaryVisibility(true);
+  });
+}
+
+function switchDataset(idx) {
+  if (idx === activeDataset) return;
+  activeDataset = idx;
+  const ds = DATASETS[idx];
+
+  // Update button states
+  document.querySelectorAll('#dataset-switcher button').forEach((btn, i) => {
+    btn.classList.toggle('active', i === idx);
+  });
+
+  // Lakes toggle: hide if dataset has no lakes data; restore checkbox state when showing
+  const lakesToggle = document.getElementById('lakes-toggle');
+  lakesToggle.style.display = ds.hasLakes ? '' : 'none';
+  if (!ds.hasLakes && includeLakes) setIncludeLakes(false);
+  if (ds.hasLakes) document.getElementById('lakes-chk').checked = includeLakes;
+
+  fetch(ds.url).then(r => r.json()).then(d => {
+    applyDataset(d);
+
+    // Update all great-circle line sources
+    LAYERS.forEach(l => {
+      if (map.getSource(l.id)) map.getSource(l.id).setData(DATA[l.id]);
+    });
+
+    // Clear boundary sources until details loads
+    const empty = { type: 'FeatureCollection', features: [] };
+    ['wet', 'dry'].forEach(side => {
+      const src  = map.getSource(`boundaries-${side}`);
+      const fsrc = map.getSource(`fine-boundaries-${side}`);
+      if (src)  src.setData(empty);
+      if (fsrc) fsrc.setData(empty);
+    });
+
+    clearPerturbed();
+    renderSummaryRows();
+    renderActiveLayers();
+    applyCoarseVisibility();
+
+    const detailsOpen = document.getElementById('details-body').classList.contains('open');
+    if (detailsOpen) loadAndApplyDetails();
+  }).catch(err => console.error('Failed to load', ds.url, err));
+}
+
+// Build dataset switcher buttons
+DATASETS.forEach((ds, i) => {
+  const btn = document.createElement('button');
+  btn.textContent = ds.label;
+  if (ds.tooltip) btn.setAttribute('data-tooltip', ds.tooltip);
+  if (i === 0) btn.classList.add('active');
+  btn.addEventListener('click', () => switchDataset(i));
+  document.getElementById('dataset-switcher').appendChild(btn);
+});
+
+fetch(DATASETS[0].url)
   .then(r => r.json())
   .then(d => {
-    DATA       = d.layers;
-    LAYERS     = d.layer_meta;
-    FINE_GRIDS = d.fine_grids;
-    dataReady  = true;
+    applyDataset(d);
+    dataReady = true;
     renderSummaryRows();
     document.getElementById('lakes-chk').addEventListener('change', e => setIncludeLakes(e.target.checked));
+    document.getElementById('lakes-toggle').style.display = DATASETS[activeDataset].hasLakes ? '' : 'none';
     if (styleReady) setupMapLayers();
-    initHeatmaps();
   })
-  .catch(err => console.error('Failed to load visuals.json:', err));
+  .catch(err => console.error('Failed to load', DATASETS[0].url, err));
 </script>
 </body>
 </html>

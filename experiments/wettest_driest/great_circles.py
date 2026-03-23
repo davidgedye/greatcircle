@@ -146,6 +146,47 @@ def great_circle_points(n: np.ndarray, n_pts: int = 3600) -> np.ndarray:
     return np.outer(np.cos(t), u) + np.outer(np.sin(t), v)
 
 
+def water_land_boundaries(theta: float, phi: float, mask: np.ndarray, grid: dict, n_pts: int) -> list:
+    """
+    Return [[lon, lat], ...] for each point where the great circle crosses
+    between water and land (or vice versa), as midpoints of adjacent samples.
+    """
+    n = normal_to_cartesian(theta, phi)
+    pts = great_circle_points(n, n_pts)
+
+    lat = np.degrees(np.arcsin(np.clip(pts[:, 2], -1.0, 1.0)))
+    lon = np.degrees(np.arctan2(pts[:, 1], pts[:, 0]))
+
+    lon_range = grid["lon_max"] - grid["lon_min"]
+    lon_norm = (lon - grid["lon_min"]) % lon_range + grid["lon_min"]
+    row = np.clip((lat - grid["lat_min"]) / grid["dlat"], 0, grid["nlat"] - 1)
+    col = (lon_norm - grid["lon_min"]) / grid["dlon"]
+    vals = map_coordinates(mask, [row, col], order=0, mode="wrap").astype(np.int8)
+
+    boundaries = []
+    for idx in np.where(np.diff(vals) != 0)[0]:
+        lo, hi = float(lon[idx]), float(lon[idx + 1])
+        d = hi - lo
+        if d > 180:    hi -= 360
+        elif d < -180: hi += 360
+        mid_lon = ((lo + hi) / 2 + 180) % 360 - 180
+        mid_lat = (float(lat[idx]) + float(lat[idx + 1])) / 2
+        to_water = int(vals[idx + 1])  # 1 = entering water, 0 = entering land
+
+        # Bearing of travel (from sample idx toward idx+1), degrees clockwise from north
+        la1, la2 = np.radians(lat[idx]), np.radians(lat[idx + 1])
+        dlo = np.radians(lon[idx + 1] - lon[idx])
+        x = np.sin(dlo) * np.cos(la2)
+        y = np.cos(la1) * np.sin(la2) - np.sin(la1) * np.cos(la2) * np.cos(dlo)
+        fwd = float(np.degrees(np.arctan2(x, y))) % 360
+        # Arrow points towards land: reverse direction if we're entering water
+        bearing_to_land = fwd if to_water == 0 else (fwd + 180) % 360
+
+        boundaries.append([round(mid_lon, 4), round(mid_lat, 4), to_water,
+                           round(bearing_to_land, 1)])
+    return boundaries
+
+
 def sample_ocean_fraction(pts: np.ndarray, mask: np.ndarray, grid: dict) -> float:
     """
     Given (n_pts, 3) Cartesian unit vectors, look up each point in the
@@ -463,9 +504,19 @@ def main():
         return [[round(np.degrees(t), 4), round(np.degrees(p), 4), round(f, 5)]
                 for f, t, p in rad_results]
 
+    top_wet_rad = results[:args.top]
+    top_dry_rad = list(reversed(results[-args.top:]))
+
+    def _best_boundaries(rad_results):
+        _, t, p = rad_results[0]
+        print(f"  Computing boundary points for best result ...")
+        return water_land_boundaries(t, p, mask, grid, args.pts)
+
     output = {
-        wet_key: {"coarse": _deg(results[:args.top])},
-        dry_key: {"coarse": _deg(list(reversed(results[-args.top:])))},
+        wet_key: {"coarse": _deg(top_wet_rad),
+                  "coarse_best_boundaries": _best_boundaries(top_wet_rad)},
+        dry_key: {"coarse": _deg(top_dry_rad),
+                  "coarse_best_boundaries": _best_boundaries(top_dry_rad)},
     }
 
     if not args.no_fine:
