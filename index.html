@@ -160,6 +160,8 @@
     #style-switcher span { display: none; }
     #style-switcher select { padding: 3px 4px; font-size: 10px; }
     #tooltip, #click-result { display: none !important; }
+    #map-card { display: none; }
+    .mapboxgl-ctrl-scale { display: none; }
     .mapboxgl-ctrl-bottom-left,
     .mapboxgl-ctrl-bottom-right { bottom: 60px !important; }
   }
@@ -571,7 +573,7 @@ if (isMobile) requestAnimationFrame(() => {
   const h = _col.offsetHeight;
   if (h) map.easeTo({ padding: { top: 0, bottom: h + 20, left: 0, right: 0 }, duration: 0 });
 });
-map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-left');
 map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200, unit: 'metric' }), 'bottom-left');
 
 // ── Perturbed circle & HUD ────────────────────────────────────────────────────
@@ -647,7 +649,6 @@ class NorthUpControl {
   }
   onRemove() { this._container.parentNode.removeChild(this._container); }
 }
-map.addControl(new NorthUpControl(), 'bottom-right');
 
 // ── Map layer setup ───────────────────────────────────────────────────────────
 let togglesBuilt = false;
