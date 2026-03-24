@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>About — Wettest &amp; Driest Great Circles</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0d0d0d; color: #ccc;
+    font-family: 'Courier New', monospace; font-size: 14px;
+    line-height: 1.7;
+  }
+  #content {
+    max-width: 760px; margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+  h1, h2, h3 { color: #eee; font-weight: bold; margin: 1.6em 0 0.5em; letter-spacing: 1px; }
+  h1 { font-size: 18px; letter-spacing: 2px; }
+  h2 { font-size: 15px; border-bottom: 1px solid #2a2a2a; padding-bottom: 6px; }
+  h3 { font-size: 13px; }
+  p { margin: 0.7em 0; }
+  a { color: #00e5ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: #1a1a1a; border: 1px solid #2a2a2a;
+    border-radius: 3px; padding: 1px 5px; font-size: 12px;
+  }
+  pre {
+    background: #111; border: 1px solid #2a2a2a; border-radius: 5px;
+    padding: 14px 16px; overflow-x: auto; margin: 1em 0;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 12px; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 13px;
+  }
+  th, td { border: 1px solid #2a2a2a; padding: 6px 10px; text-align: left; }
+  th { color: #eee; background: #1a1a1a; }
+  tr:nth-child(even) { background: #111; }
+  blockquote {
+    border-left: 3px solid #444; margin: 1em 0; padding: 4px 14px; color: #888;
+  }
+  hr { border: none; border-top: 1px solid #2a2a2a; margin: 2em 0; }
+  #back {
+    display: inline-block; margin-bottom: 28px;
+    color: #555; font-size: 11px; letter-spacing: 1px; text-decoration: none;
+  }
+  #back:hover { color: #aaa; }
+</style>
+</head>
+<body>
+<div id="content">
+  <a id="back" href="/greatcircle/">← Back to map</a>
+  <div id="md"></div>
+</div>
+<script>
+  fetch('README.md')
+    .then(r => r.text())
+    .then(text => { document.getElementById('md').innerHTML = marked.parse(text); })
+    .catch(() => { document.getElementById('md').textContent = 'Could not load README.'; });
+</script>
+</body>
+</html>

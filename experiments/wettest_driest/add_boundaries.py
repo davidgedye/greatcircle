@@ -19,10 +19,16 @@ from great_circles import normal_to_cartesian, great_circle_points
 
 
 def water_land_boundaries_chunked(theta, phi, nc_path, lakes_path=None,
-                                   n_pts=86400, strip_rows=500):
+                                   n_pts=86400, strip_rows=500,
+                                   suppress_lakes=False):
     """
     Compute land/water boundary crossings without loading the full mask into RAM.
     Streams the elevation file in horizontal strips (~40 MB each at default settings).
+
+    lakes_path + suppress_lakes=True  → treat lake polygons as land (removes
+      spurious transitions from Great-Lakes-style sub-sea-level lake beds).
+    lakes_path + suppress_lakes=False → treat lake polygons as water (adds
+      freshwater lakes to the water mask).
 
     Returns [[lon, lat, to_water, bearing_to_land], ...].
     """
@@ -92,12 +98,20 @@ def water_land_boundaries_chunked(theta, phi, nc_path, lakes_path=None,
         elif ascending:
             strip = (elev_nc[s0:s1, :] <= 0).astype(np.int8)
             if lakes_mmap is not None:
-                strip |= lakes_mmap[s0:s1, :].astype(np.int8)
+                lk = lakes_mmap[s0:s1, :].astype(np.int8)
+                if suppress_lakes:
+                    strip &= ~lk
+                else:
+                    strip |= lk
         else:
             fs, fe = nlat - s1, nlat - s0
             strip = (elev_nc[fs:fe, :] <= 0).astype(np.int8)[::-1]
             if lakes_mmap is not None:
-                strip |= lakes_mmap[fs:fe, :].astype(np.int8)[::-1]
+                lk = lakes_mmap[fs:fe, :].astype(np.int8)[::-1]
+                if suppress_lakes:
+                    strip &= ~lk
+                else:
+                    strip |= lk
 
         idx          = np.where(in_strip)[0]
         vals[idx]    = strip[row_i[idx] - s0, col_i[idx]]
@@ -142,10 +156,13 @@ def main():
 
     for key, exp in results.items():
         needs_lakes = key.endswith('-lakes')
-        lakes_path  = args.lakes_mask if needs_lakes else None
-        if needs_lakes and lakes_path is None:
+        if needs_lakes and args.lakes_mask is None:
             print(f'Skipping {key} — no --lakes-mask provided')
             continue
+        # For non-lakes experiments with a mask available: suppress sub-sea-level
+        # lake beds (e.g. Great Lakes) that GEBCO would otherwise classify as water.
+        suppress = (not needs_lakes) and (args.lakes_mask is not None)
+        lakes_path = args.lakes_mask  # None if not provided
 
         coarse = exp['coarse']
         coarse_boundaries = []
@@ -153,7 +170,8 @@ def main():
             print(f'\n{key}: coarse #{rank+1} ({theta_deg:.3f}°, {phi_deg:.3f}°) ...', flush=True)
             pts = water_land_boundaries_chunked(
                 np.radians(theta_deg), np.radians(phi_deg),
-                args.data, lakes_path, args.pts, args.strip_rows)
+                args.data, lakes_path, args.pts, args.strip_rows,
+                suppress_lakes=suppress)
             coarse_boundaries.append(pts)
             print(f'  {len(pts)} boundary points')
         exp['coarse_boundaries'] = coarse_boundaries
@@ -165,7 +183,8 @@ def main():
             print(f'  fine best ({t:.3f}°, {p:.3f}°) ...', flush=True)
             pts = water_land_boundaries_chunked(
                 np.radians(t), np.radians(p),
-                args.data, lakes_path, args.pts, args.strip_rows)
+                args.data, lakes_path, args.pts, args.strip_rows,
+                suppress_lakes=suppress)
             best['boundaries'] = pts
             print(f'  {len(pts)} boundary points')
 

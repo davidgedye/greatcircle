@@ -25,6 +25,8 @@ The ice treatment difference matters: GEBCO classifies the sub-ice beds of Green
 
 **HydroLAKES** (optional, GEBCO only) — polygon dataset of lakes and reservoirs ≥ 10 ha worldwide (~1.4 M features, [hydrosheds.org](https://www.hydrosheds.org/products/hydrolakes)). When enabled, lake surfaces above sea level are also counted as water. This variant is available as a toggle in the visualiser alongside the GEBCO dataset.
 
+**Sub-sea-level lake beds (GEBCO artefact).** GEBCO records the actual bed topography of freshwater lakes. Several large lakes have beds that dip below sea level — Lake Superior's bed reaches −223 m (surface 183 m, max depth 406 m), Lake Michigan's reaches −105 m (surface 176 m, max depth 281 m). Because the water/land threshold is elevation ≤ 0 m, the deep central portions of these lakes are classified as water while the shallower margins are classified as land, producing spurious land/water transitions scattered across the lake interior. To suppress this artefact, `add_boundaries.py` applies the HydroLAKES mask in *reverse* for non-lakes experiments: any cell that falls within a lake polygon is forced to land, removing the false transitions. Toggling the lakes checkbox in the visualiser switches to the fully correct treatment where the entire lake surface is counted as water.
+
 Place data files under `data/` at the repo root (not committed — too large).
 
 ## Approach
