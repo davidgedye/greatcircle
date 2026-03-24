@@ -657,7 +657,7 @@ let togglesBuilt = false;
 const coarseShow = { 'wet-coarse': false, 'dry-coarse': false };
 
 const BOUNDARY_LAYER_IDS = ['boundaries-wet', 'boundaries-dry', 'fine-boundaries-wet', 'fine-boundaries-dry'];
-const ARROW_ZOOM_THRESHOLD = 4;
+const ARROW_ZOOM_THRESHOLD = 2;
 function setBoundaryVisibility(visible) {
   const vis = visible ? 'visible' : 'none';
   BOUNDARY_LAYER_IDS.forEach(id => {
