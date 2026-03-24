@@ -2,20 +2,30 @@
 
 Find the great circle around Earth that maximises ocean/water surface coverage ("wettest") and the one that minimises it ("driest"). "Wet" and "dry" refer purely to binary land/water coverage — not precipitation.
 
+An interactive visualisation is hosted at **https://davidgedye.github.io/greatcircle/**.
+
 ## Background
 
 Chabukswar & Mukherjee (2018) found the longest *uninterrupted* great-circle path over water (32,090 km, Pakistan → Kamchatka). That is a different objective: longest single segment, not maximum total fraction. This project addresses the total-fraction version, which does not appear to have been published.
 
 ## Data
 
-**GEBCO 2025 Sub-Ice** (General Bathymetric Chart of the Oceans), 15 arc-second resolution (~463 m at the equator).
+Two elevation datasets are supported and can be switched in the visualiser. Both use elevation ≤ 0 m as the water definition.
 
-- Download: `GEBCO_2025_sub_ice.nc` from [gebco.net](https://www.gebco.net/data_and_products/gridded_bathymetry_data/)
-- Water definition: elevation ≤ 0 m
-- ETOPO1 is also supported (auto-detected on load)
-- Lakes above sea level (Great Lakes, Caspian Sea, etc.) are not counted as water under this definition
+| | ETOPO1 (default) | GEBCO 2025 Sub-Ice |
+|---|---|---|
+| Source | NOAA | General Bathymetric Chart of the Oceans |
+| Resolution | 1 arc-minute (~1.85 km) | 15 arc-second (~450 m) |
+| Ice treatment | Ice-surface elevation | Sub-ice bed topography |
+| File | `ETOPO1_Ice_c_gdal.grd` | `GEBCO_2025_sub_ice.nc` |
+| Size | ~450 MB | ~3.7 GB |
+| Download | [ngdc.noaa.gov](https://www.ngdc.noaa.gov/mgg/global/) | [gebco.net](https://www.gebco.net/data_and_products/gridded_bathymetry_data/) |
 
-Place the file at `data/GEBCO_2025_sub_ice.nc`.
+The ice treatment difference matters: GEBCO classifies the sub-ice beds of Greenland and Antarctica (largely below sea level) as water, while ETOPO1 classifies the ice surface as land. This accounts for the ~5 percentage point difference in wettest scores between the two datasets.
+
+**HydroLAKES** (optional, GEBCO only) — polygon dataset of lakes and reservoirs ≥ 10 ha worldwide (~1.4 M features, [hydrosheds.org](https://www.hydrosheds.org/products/hydrolakes)). When enabled, lake surfaces above sea level are also counted as water. This variant is available as a toggle in the visualiser alongside the GEBCO dataset.
+
+Place data files under `data/` at the repo root (not committed — too large).
 
 ## Approach
 
@@ -23,111 +33,138 @@ Place the file at `data/GEBCO_2025_sub_ice.nc`.
 
 A great circle is uniquely identified by its plane's normal vector **n**, expressed in spherical coordinates as (θ, φ):
 
-- **θ** (colatitude): 0° – 180°
-- **φ** (longitude): 0° – 180° — antipodal symmetry halves the search space
+- **θ** (colatitude): 0°–180°
+- **φ** (longitude): 0°–180° — antipodal symmetry halves the search space
 
 The grid must be sampled **uniformly in cos(θ)**, not uniformly in θ, to give equal solid-angle coverage. A naive linear grid in θ would oversample near the poles of normal-vector space.
 
 ### Two-stage search
 
-**Stage 1 — Coarse grid** (~32,400 circles)
+**Stage 1 — Coarse grid** (~32,400 circles at default grid=180)
 - 180×180 grid in (cos θ, φ)
-- 3,600 sample points per circle by default; use `--pts 86400` to match GEBCO's 15 arc-second resolution
+- 86,400 sample points per circle (matches GEBCO 15 arc-second resolution); ETOPO1 uses 21,600
 - Nearest-neighbour lookup via `scipy.ndimage.map_coordinates`
 - Parallelised across CPU cores with `ProcessPoolExecutor`
 
 **Stage 2 — Fine zoom**
-- Top 10 wettest and bottom 10 driest coarse candidates are each refined
+- Top 10 coarse candidates are each refined
 - ±2° window around each seed at 0.05° step size (80×80 grid per candidate)
-- Maximised for wettest, minimised for driest
 - Full search surface saved to `results.json` for visualisation
 
-### Results
+## Results
 
-| | Pole location | Score |
-|---|---|---|
-| **Wettest (fine)** | 6.32°S 63.27°E | **96.32% ocean** |
-| **Driest (fine)** | 12.96°N 15.28°E | **53.12% land** |
+| Dataset | | Pole location | Score |
+|---|---|---|---|
+| **ETOPO1** | Wettest | 24.1°N 79.5°E | **91.57% ocean** |
+| **ETOPO1** | Driest | 6.5°S 25.4°E | **57.68% land** |
+| **GEBCO** | Wettest | 6.3°S 63.4°E | **96.32% ocean** |
+| **GEBCO** | Driest | 13.0°N 15.3°E | **53.11% land** |
+| **GEBCO + lakes** | Wettest | 6.3°S 63.4°E | **96.32% ocean** |
+| **GEBCO + lakes** | Driest | 13.0°N 15.3°E | **51.55% land** |
+
+The two datasets find different wettest circles (ETOPO1: Indian subcontinent axis; GEBCO: Indian Ocean axis) but similar driest circles (both cross central Africa and Asia). The ~5 pp wettest score difference is explained by ice sheet treatment — see the Data section.
 
 The wettest circle tilts through the Indian Ocean, western Pacific and Arctic — almost entirely open water. The driest circle threads through central Africa, Europe, central Asia and North America, crossing the major continental land masses.
 
-## Usage
+## Repository structure
 
-```bash
-# Install dependencies
-pip install netCDF4 scipy numpy
-
-# Run full search (coarse + fine) using all cores, full GEBCO resolution
-python3 great_circles.py data/GEBCO_2025_sub_ice.nc --workers 8 --pts 86400
-
-# Generate visuals.json for the web page
-python3 visualize.py
-
-# Serve locally (fetch() requires HTTP — file:// won't work)
-python3 -m http.server 8000
-# Open http://localhost:8000/results.html
+```
+index.html                          Web visualisation (GitHub Pages root)
+experiments/
+  wettest_driest/
+    great_circles.py                Search algorithm — writes results JSON
+    add_boundaries.py               Augments results with land/water boundary points
+    make_lakes_mask.py              Rasterises HydroLAKES onto the GEBCO grid
+    visualize.py                    Converts results JSON → web-ready JSON
+    compare_datasets.py             Cross-dataset comparison table
+    Makefile                        Full pipeline
+    etopo1.json                     ETOPO1 search results
+    results.json                    GEBCO search results (oceans + lakes variants)
+    etopo1_visuals.json             ETOPO1 map data (initial load)
+    etopo1_details.json             ETOPO1 detail data (lazy-loaded)
+    gebco_visuals.json              GEBCO map data (initial load)
+    gebco_details.json              GEBCO detail data (lazy-loaded)
+data/
+  ETOPO1_Ice_c_gdal.grd             Not in repo (~450 MB)
+  GEBCO/GEBCO_2025_sub_ice.nc       Not in repo (~3.7 GB)
+  lakes_mask.npy                    Rasterised HydroLAKES (~500 MB, generated)
+  HydroLAKES_polys_v10_shp/         Not in repo
 ```
 
-### Options
+## Usage
+
+All commands run from `experiments/wettest_driest/`.
+
+```bash
+pip install netCDF4 scipy numpy shapely fiona
+
+# Full pipeline (search → boundaries → web JSON)
+make
+
+# Or step by step:
+python3 great_circles.py ../../data/GEBCO/GEBCO_2025_sub_ice.nc --workers 8 --pts 86400
+python3 add_boundaries.py ../../data/GEBCO/GEBCO_2025_sub_ice.nc --lakes-mask ../../data/lakes_mask.npy
+python3 visualize.py
+
+# ETOPO1
+python3 great_circles.py ../../data/ETOPO1_Ice_c_gdal.grd --workers 8
+python3 add_boundaries.py ../../data/ETOPO1_Ice_c_gdal.grd --results etopo1.json
+python3 visualize.py --input etopo1.json --output etopo1_visuals.json --details-output etopo1_details.json
+
+# Cross-dataset comparison
+make compare
+
+# Serve locally
+python3 -m http.server 8000  # from repo root
+# Open http://localhost:8000/
+```
+
+### Key options for `great_circles.py`
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--workers N` | 1 | Parallel worker processes |
 | `--grid N` | 180 | Coarse grid size (N×N) |
-| `--pts N` | 3600 | Sample points per circle |
+| `--pts N` | auto | Sample points per circle (defaults to dataset native resolution) |
 | `--no-fine` | off | Skip fine zoom stage |
-| `--top N` | 10 | Results to print per category |
+| `--lakes-mask PATH` | — | Include lakes above sea level |
 
 ## Visualisation
 
-`visualize.py` reads `results.json` and writes `visuals.json` (~277 KB). The static page `results.html` fetches `visuals.json` at load time, so it must be served over HTTP.
+The web page (`index.html`) loads map data immediately and lazily loads detail data (heatmaps, boundary arrows) only when the Details panel is opened.
+
+**Two datasets** are selectable via buttons in the Details panel. ETOPO1 loads on startup (~700 KB); GEBCO loads on demand (~1.4 MB). Hovering the buttons shows a tooltip explaining each dataset and its resolution.
 
 **Map features:**
-- Satellite + roads basemap (switchable via dropdown to Satellite, Dark, Outdoors, Light)
-- Globe projection with atmosphere fog
-- All six layers grow in width as you zoom in; fine best lines represent the ~10 km positional uncertainty band
-- Layer toggles — only the two fine best results are shown by default
-- Collapsible legend panel; globe centres itself in the area to the left of the panel
-- North-up / no-tilt reset button (bottom right)
-- Map style switcher dropdown
+- Globe projection with atmosphere and fog
+- Switchable basemap (Satellite, Dark, Outdoors, Light, etc.)
+- Fine best great circles shown by default; coarse top-10 toggleable in Details
+- Lines grow in width with zoom; fine best lines represent the ~10 km positional uncertainty band
+- Scale indicator (bottom left)
+
+**Land/water boundary arrows** (Details panel):
+- Triangular arrows at every land/water transition along the top-10 coarse and best fine circles, pointing toward land
+- Computed at full dataset resolution (86,400 pts for GEBCO, 21,600 for ETOPO1) using chunked streaming to avoid loading the full elevation file into memory
+
+**Fine search heatmaps** (Details panel):
+- Show the optimisation landscape across the ±2° fine search window
+- Click a cell to draw that great circle on the map
+- Click on the map near a winning line to highlight the corresponding heatmap cell
 
 **Great circle pole markers:**
-- `+` symbols mark both poles of each winning great circle's axis (cyan for wettest, red for driest)
-- Clicking a pole marker shows an explanation in the HUD
+- `+` symbols mark both poles of each winning circle's axis
+- Clicking a pole shows an explanation in the HUD
 
-**Hover tooltips:**
-- Hovering any line shows its label, coverage percentage, and pole location in lat/lon
+**Mobile layout:**
+- At ≤640 px width, the panel collapses to a compact bottom bar showing the wettest/driest percentages and a map style selector
+- Details and heatmaps require a larger screen
 
-**Fine search heatmaps** (in the legend panel):
-- Show the optimisation landscape (ocean/land fraction) across the ±2° fine search window
-- White crosshair = best found point; coloured crosshair = currently selected point
-- Hover to read the coverage value and pole location at any cell
+## Uncertainty
 
-**Bidirectional map ↔ heatmap interaction:**
-- *Click on the map* near a winning line: draws a dashed great circle through that point, shows the coverage for both the best known result (solid swatch) and the perturbed circle (dashed swatch) in the HUD, and highlights the corresponding position in the fine-search heatmap
-- *Click on a heatmap cell*: draws the great circle for that (θ, φ) on the map and highlights the clicked cell
-- Press **Escape** to clear
+The fine best result has an estimated positional uncertainty of ~10 km from:
 
-**Uncertainty bands:** All lines grow with zoom. The fine best lines reach ~130 px width at zoom 10, representing the estimated ~10 km positional uncertainty from:
-
-1. **Search grid resolution** — fine step size of 0.05°, results cluster within ~0.03° → ~3–5 km lateral displacement
-2. **GEBCO coastline accuracy** — 15 arc-second cells, coastal positions uncertain by ~1–2 km
+1. **Search grid resolution** — fine step 0.05°, results cluster within ~0.03° → ~3–5 km
+2. **Coastline accuracy** — ETOPO1 ~1.85 km cells; GEBCO ~450 m cells → ~0.5–2 km
 3. **Elevation threshold** — tidal flats can shift the effective coastline by 2–10 km
 
 Combined (RSS): ~7 km, rounded to 10 km for display.
-
-**Antimeridian handling:** Line coordinates are unwrapped (allowed to exceed ±180°) rather than split, keeping great circles continuous across the antimeridian on a globe projection.
-
-## Files
-
-| File | Purpose |
-|------|---------|
-| `great_circles.py` | Data loading, search algorithm, console output, writes `results.json` |
-| `visualize.py` | Reads `results.json` and writes `visuals.json` |
-| `results.html` | Static interactive visualisation page — edit directly, serve over HTTP |
-| `visuals.json` | GeoJSON layers + fine search grids (committed) |
-| `results.json` | Search output: coarse top-10 + fine grid data (committed) |
-| `config.py` | Mapbox token — gitignored, copy from `config.py.example` |
-| `config.py.example` | Token placeholder for new users |
-| `data/GEBCO_2025_sub_ice.nc` | Elevation data — not in repo (~3.7 GB) |
-| `great_circles_project.md` | Original design notes and problem definition |
