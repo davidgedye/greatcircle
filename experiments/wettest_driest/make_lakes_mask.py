@@ -92,14 +92,17 @@ def rasterize_lakes(shp_path, nlat, nlon, lat_min, lat_max, lon_min, lon_max, ou
                     dtype=np.int8,
                     fill=0,
                 )
-                mask[band_start_row:band_end_row, :] |= band_mask
+                # rasterize() returns row 0 = northernmost (rasterio convention).
+                # Flip so the band is stored south-to-north, matching the
+                # ascending-lat row indexing used in add_boundaries.py.
+                mask[band_start_row:band_end_row, :] |= band_mask[::-1]
 
             if band_start_row % (band_rows * 5) == 0:
                 pct = band_start_row / nlat * 100
                 print(f"  {pct:.0f}% ({time.time()-t0:.0f}s elapsed)", flush=True)
 
-    # GEBCO lats are ascending (south to north); rasterio also fills south-to-north
-    # when south < north in from_bounds — no flip needed.
+    # rasterio rasterizes north-to-south (row 0 = north); each band_mask is
+    # flipped on write so the final mask is ascending (row 0 = southernmost).
     print(f"  Done in {time.time()-t0:.1f}s")
     print(f"  Lake cells: {mask.sum():,} / {nlat*nlon:,}  ({mask.mean()*100:.3f}%)")
     np.save(out_path, mask)
