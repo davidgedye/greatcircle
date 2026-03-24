@@ -574,7 +574,7 @@ if (isMobile) requestAnimationFrame(() => {
   const h = _col.offsetHeight;
   if (h) map.easeTo({ padding: { top: 0, bottom: h + 20, left: 0, right: 0 }, duration: 0 });
 });
-map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-left');
+map.addControl(new mapboxgl.NavigationControl(), 'top-left');
 map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200, unit: 'metric' }), 'bottom-left');
 
 // ── Perturbed circle & HUD ────────────────────────────────────────────────────
