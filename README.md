@@ -65,6 +65,8 @@ The grid must be sampled **uniformly in cos(θ)**, not uniformly in θ, to give 
 | **GEBCO + lakes** | Wettest | 6.31°S 63.38°E | **96.32% ocean** |
 | **GEBCO + lakes** | Driest | 13.01°N 15.28°E | **51.55% land** |
 
+*Results as of 2026-03-24 (commit a29c472)*
+
 The two datasets find different wettest circles (ETOPO 2022: Indian subcontinent axis; GEBCO: Indian Ocean axis) but similar driest circles (both cross central Africa and Asia). The ~5 pp wettest score difference is explained by ice sheet treatment — see the Data section.
 
 The wettest circle tilts through the Indian Ocean, western Pacific and Arctic — almost entirely open water. The driest circle threads through central Africa, Europe, central Asia and North America, crossing the major continental land masses.

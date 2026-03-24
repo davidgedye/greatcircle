@@ -1,5 +1,7 @@
 """Print the README results table from etopo.json and gebco.json."""
 import json
+import subprocess
+from datetime import date
 
 
 def best(exp):
@@ -22,6 +24,9 @@ def row(dataset, kind, frac, t, p):
 e = json.load(open('etopo.json'))
 g = json.load(open('gebco.json'))
 
+commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], text=True).strip()
+today  = date.today().isoformat()
+
 print("| Dataset | | Pole location | Score |")
 print("|---|---|---|---|")
 row('ETOPO 2022',    'Wettest', *best(e['wettest']))
@@ -30,3 +35,5 @@ row('GEBCO',         'Wettest', *best(g['wettest']))
 row('GEBCO',         'Driest',  *best(g['driest']))
 row('GEBCO + lakes', 'Wettest', *best(g['wettest-lakes']))
 row('GEBCO + lakes', 'Driest',  *best(g['driest-lakes']))
+print()
+print(f"*Results as of {today} (commit {commit})*")
