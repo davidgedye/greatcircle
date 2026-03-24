@@ -665,9 +665,12 @@ function setBoundaryVisibility(visible) {
   });
 }
 function updateBoundaryVisibility() {
-  const detailsOpen = document.getElementById('details-body').classList.contains('open');
-  const zoomedIn = map.getZoom() >= ARROW_ZOOM_THRESHOLD;
-  setBoundaryVisibility(detailsOpen || zoomedIn);
+  const show = document.getElementById('details-body').classList.contains('open') || map.getZoom() >= ARROW_ZOOM_THRESHOLD;
+  const setVis = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
+  setVis('fine-boundaries-wet', show);
+  setVis('fine-boundaries-dry', show);
+  setVis('boundaries-wet', show && coarseShow['wet-coarse']);
+  setVis('boundaries-dry', show && coarseShow['dry-coarse']);
 }
 
 function applyCoarseVisibility() {
@@ -681,6 +684,7 @@ function applyCoarseVisibility() {
     if (!map.getLayer(l.id)) return;
     map.setLayoutProperty(l.id, 'visibility', shouldShow[l.id] ? 'visible' : 'none');
   });
+  updateBoundaryVisibility();
 }
 
 function renderActiveLayers() {
