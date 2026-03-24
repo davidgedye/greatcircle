@@ -25,7 +25,17 @@
     border-radius: 8px; padding: 14px 16px; color: #ccc;
     font-size: 12px; min-width: 240px;
     backdrop-filter: blur(6px);
+    position: relative;
   }
+  #info-btn {
+    position: absolute; top: 8px; right: 10px;
+    background: none; border: 1px solid #444; border-radius: 50%;
+    color: #555; font-size: 11px; font-family: serif; font-style: italic;
+    width: 18px; height: 18px; line-height: 16px; text-align: center;
+    cursor: pointer; padding: 0; text-decoration: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #info-btn:hover { color: #aaa; border-color: #aaa; }
 
   /* ── Map card ── */
   #map-card {
@@ -194,6 +204,7 @@
 <div id="right-col">
 
 <div id="panel">
+  <a id="info-btn" href="https://github.com/davidgedye/greatcircle/blob/master/README.md" target="_blank" rel="noopener" title="About this project">i</a>
   <h3 id="panel-title">GREAT CIRCLES</h3>
   <div id="panel-body">
 
