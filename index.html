@@ -543,7 +543,7 @@ document.getElementById('details-hdr').addEventListener('click', () => {
   if (opening && dataReady && styleReady) {
     loadAndApplyDetails();
   } else if (styleReady) {
-    setBoundaryVisibility(false);
+    updateBoundaryVisibility();
   }
 });
 
@@ -657,11 +657,17 @@ let togglesBuilt = false;
 const coarseShow = { 'wet-coarse': false, 'dry-coarse': false };
 
 const BOUNDARY_LAYER_IDS = ['boundaries-wet', 'boundaries-dry', 'fine-boundaries-wet', 'fine-boundaries-dry'];
+const ARROW_ZOOM_THRESHOLD = 4;
 function setBoundaryVisibility(visible) {
   const vis = visible ? 'visible' : 'none';
   BOUNDARY_LAYER_IDS.forEach(id => {
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
   });
+}
+function updateBoundaryVisibility() {
+  const detailsOpen = document.getElementById('details-body').classList.contains('open');
+  const zoomedIn = map.getZoom() >= ARROW_ZOOM_THRESHOLD;
+  setBoundaryVisibility(detailsOpen || zoomedIn);
 }
 
 function applyCoarseVisibility() {
@@ -849,12 +855,21 @@ function setupMapLayers() {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 let styleReady = false, dataReady = false;
 
+map.on('zoomend', () => {
+  if (!styleReady || !dataReady) return;
+  if (map.getZoom() >= ARROW_ZOOM_THRESHOLD && !detailsCache[activeDataset]) {
+    loadAndApplyDetails();
+  } else {
+    updateBoundaryVisibility();
+  }
+});
+
 map.on('style.load', () => {
   styleReady = true;
   if (dataReady) {
     setupMapLayers();
     const detailsOpen = document.getElementById('details-body').classList.contains('open');
-    if (detailsOpen) loadAndApplyDetails();
+    if (detailsOpen || map.getZoom() >= ARROW_ZOOM_THRESHOLD) loadAndApplyDetails();
   }
 });
 
@@ -895,7 +910,7 @@ function loadAndApplyDetails() {
     });
     renderHeatmaps();
     renderPoleMarkers();
-    setBoundaryVisibility(true);
+    updateBoundaryVisibility();
   });
 }
 
