@@ -1,13 +1,18 @@
 """
-make_lakes_mask.py — Rasterize HydroLAKES polygons onto the GEBCO grid.
+make_lakes_mask.py — Rasterize HydroLAKES polygons onto an elevation grid.
 
-Produces data/lakes_mask.npy: int8 array, same shape as the GEBCO water mask,
-with 1 where a lake polygon covers the cell and 0 elsewhere.
+Produces a lakes mask .npy file: int8 array, same shape as the source grid,
+with 1 where a lake polygon covers the cell and 0 elsewhere.  Works with both
+GEBCO (standard NetCDF lat/lon) and ETOPO (GMT grid format).
 
 Usage:
     python3 make_lakes_mask.py data/GEBCO_2025_sub_ice.nc \
                                data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp \
                                data/lakes_mask.npy
+
+    python3 make_lakes_mask.py data/ETOPO_2022_v1_60s_N90W180_surface.nc \
+                               data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp \
+                               data/etopo_lakes_mask.npy
 """
 
 import argparse
@@ -21,20 +26,32 @@ from rasterio.transform import from_bounds
 from shapely.geometry import shape, box
 
 
-def load_gebco_grid(path):
-    """Return (nlat, nlon, lat_min, lat_max, lon_min, lon_max) from GEBCO NetCDF."""
+def load_grid_dims(path):
+    """Return (nlat, nlon, lat_min, lat_max, lon_min, lon_max) from GEBCO or ETOPO NetCDF."""
     ds = nc.Dataset(path, "r")
-    lat_var = next(n for n in ds.variables if n.lower() in ("lat", "latitude"))
-    lon_var = next(n for n in ds.variables if n.lower() in ("lon", "longitude"))
-    lats = ds.variables[lat_var][:]
-    lons = ds.variables[lon_var][:]
-    ds.close()
-    nlat, nlon = len(lats), len(lons)
-    lat_min, lat_max = float(lats.min()), float(lats.max())
-    lon_min, lon_max = float(lons.min()), float(lons.max())
-    dlat = abs(float(lats[1] - lats[0]))
-    dlon = abs(float(lons[1] - lons[0]))
-    print(f"GEBCO grid: {nlat} x {nlon}  ({dlat*60:.2f} arc-min resolution)")
+    if "x_range" in ds.variables:
+        # GMT grid format (ETOPO)
+        lon_min = float(ds.variables["x_range"][0])
+        lon_max = float(ds.variables["x_range"][1])
+        lat_min = float(ds.variables["y_range"][0])
+        lat_max = float(ds.variables["y_range"][1])
+        dlat    = float(ds.variables["spacing"][1])
+        dlon    = float(ds.variables["spacing"][0])
+        nlon    = int(ds.variables["dimension"][0])
+        nlat    = int(ds.variables["dimension"][1])
+        ds.close()
+    else:
+        lat_var = next(n for n in ds.variables if n.lower() in ("lat", "latitude"))
+        lon_var = next(n for n in ds.variables if n.lower() in ("lon", "longitude"))
+        lats = ds.variables[lat_var][:]
+        lons = ds.variables[lon_var][:]
+        ds.close()
+        nlat, nlon = len(lats), len(lons)
+        lat_min, lat_max = float(lats.min()), float(lats.max())
+        lon_min, lon_max = float(lons.min()), float(lons.max())
+        dlat = abs(float(lats[1] - lats[0]))
+        dlon = abs(float(lons[1] - lons[0]))
+    print(f"Grid: {nlat} x {nlon}  ({dlat*60:.2f} arc-min resolution)")
     return nlat, nlon, lat_min, lat_max, lon_min, lon_max
 
 
@@ -111,12 +128,12 @@ def rasterize_lakes(shp_path, nlat, nlon, lat_min, lat_max, lon_min, lon_max, ou
 
 def main():
     parser = argparse.ArgumentParser(description="Build lakes mask from HydroLAKES shapefile.")
-    parser.add_argument("gebco",   help="Path to GEBCO NetCDF (for grid dimensions)")
+    parser.add_argument("grid",    help="Path to elevation NetCDF (GEBCO or ETOPO, for grid dimensions)")
     parser.add_argument("shp",     help="Path to HydroLAKES .shp file")
     parser.add_argument("output",  help="Output path for lakes mask (.npy)")
     args = parser.parse_args()
 
-    nlat, nlon, lat_min, lat_max, lon_min, lon_max = load_gebco_grid(args.gebco)
+    nlat, nlon, lat_min, lat_max, lon_min, lon_max = load_grid_dims(args.grid)
     rasterize_lakes(args.shp, nlat, nlon, lat_min, lat_max, lon_min, lon_max, args.output)
 
 

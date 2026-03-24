@@ -1,7 +1,8 @@
 ETOPO1     = ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc
 GEBCO      = ../../data/GEBCO/GEBCO_2025_sub_ice.nc
 LAKES_SHP  = ../../data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp
-LAKES_MASK = ../../data/lakes_mask.npy
+LAKES_MASK       = ../../data/lakes_mask.npy
+ETOPO_LAKES_MASK = ../../data/etopo_lakes_mask.npy
 WORKERS    = 8
 PTS        = 86400
 all: gebco_visuals.json etopo1_visuals.json
@@ -10,6 +11,9 @@ all: gebco_visuals.json etopo1_visuals.json
 
 $(LAKES_MASK): $(GEBCO) $(LAKES_SHP) make_lakes_mask.py
 	python3 make_lakes_mask.py $(GEBCO) $(LAKES_SHP) $(LAKES_MASK)
+
+$(ETOPO_LAKES_MASK): $(ETOPO1) $(LAKES_SHP) make_lakes_mask.py
+	python3 make_lakes_mask.py $(ETOPO1) $(LAKES_SHP) $(ETOPO_LAKES_MASK)
 
 # ── Search ───────────────────────────────────────────────────────────────────
 
@@ -40,8 +44,8 @@ results-with-boundaries.json: results.json add_boundaries.py
 	python3 add_boundaries.py $(GEBCO) --lakes-mask $(LAKES_MASK) --pts $(PTS)
 	cp results.json results-with-boundaries.json
 
-etopo1-with-boundaries.json: etopo1.json add_boundaries.py
-	python3 add_boundaries.py $(ETOPO1) --results etopo1.json
+etopo1-with-boundaries.json: etopo1.json $(ETOPO_LAKES_MASK) add_boundaries.py
+	python3 add_boundaries.py $(ETOPO1) --results etopo1.json --lakes-mask $(ETOPO_LAKES_MASK)
 	cp etopo1.json etopo1-with-boundaries.json
 
 # ── Visualisation ────────────────────────────────────────────────────────────

@@ -95,6 +95,12 @@ def water_land_boundaries_chunked(theta, phi, nc_path, lakes_path=None,
             fs, fe = nlat - s1, nlat - s0
             raw = elev_nc[fs * nlon : fe * nlon].reshape(s1 - s0, nlon)[::-1]
             strip = (raw <= 0).astype(np.int8)
+            if lakes_mmap is not None:
+                lk = lakes_mmap[s0:s1, :].astype(np.int8)
+                if suppress_lakes:
+                    strip &= ~lk
+                else:
+                    strip |= lk
         elif ascending:
             strip = (elev_nc[s0:s1, :] <= 0).astype(np.int8)
             if lakes_mmap is not None:

@@ -27,11 +27,12 @@
     backdrop-filter: blur(6px);
     position: relative;
   }
+  #summary-area { display: flex; align-items: center; gap: 10px; }
+  #summary-area #summary { flex: 1; }
   #info-btn {
-    position: absolute; top: 13px; right: 10px;
     background: none; border: 1px solid #888; border-radius: 50%;
-    color: #888; font-size: 8px; font-family: serif; font-style: italic; font-weight: bold;
-    width: 14px; height: 14px; text-align: center;
+    color: #888; font-size: 16px; font-family: serif; font-style: italic; font-weight: bold;
+    width: 28px; height: 28px; text-align: center; flex-shrink: 0;
     cursor: pointer; padding: 0; text-decoration: none;
     display: flex; align-items: center; justify-content: center;
   }
@@ -70,12 +71,12 @@
   /* ── Collapsible Details section ── */
   .section-hdr {
     display: flex; justify-content: space-between; align-items: center;
-    font-size: 10px; color: #666; letter-spacing: 2px;
+    font-size: 11px; color: #999; letter-spacing: 2px;
     cursor: pointer; user-select: none;
-    padding: 8px 0; border-top: 1px solid #2a2a2a; margin-top: 4px;
+    padding: 9px 0; border-top: 1px solid #444; margin-top: 4px;
   }
-  .section-hdr:hover { color: #aaa; }
-  .sec-chevron { font-size: 12px; }
+  .section-hdr:hover { color: #ddd; }
+  .sec-chevron { font-size: 13px; }
   .section-body {
     overflow: hidden; max-height: 0; opacity: 0;
     transition: max-height 0.3s ease, opacity 0.25s ease;
@@ -180,10 +181,8 @@
     #map-card { display: none; }
     .mapboxgl-ctrl-scale { display: none; }
     .mapboxgl-ctrl-top-left { display: none; }
-    #info-btn { width: 28px; height: 28px; font-size: 16px; top: 50%; transform: translateY(-50%); }
-    .mapboxgl-ctrl-attrib-button { display: none !important; }
-    .mapboxgl-ctrl-attrib { background: none !important; }
-    .mapboxgl-ctrl-attrib-inner { display: block !important; font-size: 9px; }
+    #info-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+    #summary-area { margin-right: 36px; }
   }
 
   /* ── HUD overlays ── */
@@ -212,27 +211,29 @@
 <div id="right-col">
 
 <div id="panel">
-  <a id="info-btn" href="about.html" title="About this project">i</a>
-  <h3 id="panel-title">GREAT CIRCLES</h3>
+  <h3 id="panel-title">GREAT CIRCLES OF THE EARTH</h3>
   <div id="panel-body">
 
     <div id="mobile-title">Great Circles of the Earth</div>
 
-    <div id="summary">
-      <div class="summary-row">
-        <div class="row-swatch" style="background:#00e5ff"></div>
-        <div class="row-info">
-          <div class="row-lbl">Wettest</div>
-          <div class="row-pct" id="wet-pct" style="color:#00e5ff">–</div>
+    <div id="summary-area">
+      <div id="summary">
+        <div class="summary-row">
+          <div class="row-swatch" style="background:#00e5ff"></div>
+          <div class="row-info">
+            <div class="row-lbl">Wettest</div>
+            <div class="row-pct" id="wet-pct" style="color:#00e5ff">–</div>
+          </div>
+        </div>
+        <div class="summary-row">
+          <div class="row-swatch" style="background:#ff1744"></div>
+          <div class="row-info">
+            <div class="row-lbl">Driest</div>
+            <div class="row-pct" id="dry-pct" style="color:#ff1744">–</div>
+          </div>
         </div>
       </div>
-      <div class="summary-row">
-        <div class="row-swatch" style="background:#ff1744"></div>
-        <div class="row-info">
-          <div class="row-lbl">Driest</div>
-          <div class="row-pct" id="dry-pct" style="color:#ff1744">–</div>
-        </div>
-      </div>
+      <a id="info-btn" href="about.html" title="About this project">i</a>
     </div>
 
     <div id="mobile-hint">More fun on a bigger screen</div>
@@ -566,7 +567,7 @@ document.getElementById('details-hdr').addEventListener('click', () => {
   if (opening && dataReady && styleReady) {
     loadAndApplyDetails();
   } else if (styleReady) {
-    updateBoundaryVisibility();
+    applyCoarseVisibility();
   }
 });
 
@@ -590,7 +591,9 @@ const map = new mapboxgl.Map({
   projection: 'globe',
   center: [129, 0],
   zoom: initialZoom(),
+  attributionControl: false,
 });
+map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
 map.jumpTo({ center: [129, 0], zoom: initialZoom(), padding: _initPad });
 if (isMobile) requestAnimationFrame(() => {
   const h = _col.offsetHeight;
@@ -688,25 +691,30 @@ function setBoundaryVisibility(visible) {
   });
 }
 function updateBoundaryVisibility() {
+  // Fine boundary arrows: show when Details open or zoomed in
   const show = document.getElementById('details-body').classList.contains('open') || map.getZoom() >= ARROW_ZOOM_THRESHOLD;
   const setVis = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
   setVis('fine-boundaries-wet', show);
   setVis('fine-boundaries-dry', show);
-  setVis('boundaries-wet', show && coarseShow['wet-coarse']);
-  setVis('boundaries-dry', show && coarseShow['dry-coarse']);
 }
 
 function applyCoarseVisibility() {
+  const detailsOpen = document.getElementById('details-body').classList.contains('open');
   const [wetKey, dryKey] = ACTIVE();
-  // Build the map of which layer IDs should be visible
+  const wetVis = detailsOpen && coarseShow['wet-coarse'];
+  const dryVis = detailsOpen && coarseShow['dry-coarse'];
   const shouldShow = {
-    [wetKey + '-coarse']: coarseShow['wet-coarse'],
-    [dryKey + '-coarse']: coarseShow['dry-coarse'],
+    [wetKey + '-coarse']: wetVis,
+    [dryKey + '-coarse']: dryVis,
   };
+  // Lines and their boundaries are set together — we never show one without the other
+  const setVis = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
   LAYERS.filter(l => !l.id.endsWith('-fine')).forEach(l => {
     if (!map.getLayer(l.id)) return;
     map.setLayoutProperty(l.id, 'visibility', shouldShow[l.id] ? 'visible' : 'none');
   });
+  setVis('boundaries-wet', wetVis);
+  setVis('boundaries-dry', dryVis);
   updateBoundaryVisibility();
 }
 
