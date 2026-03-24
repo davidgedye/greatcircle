@@ -402,11 +402,15 @@ function initHeatmap(idx) {
   });
 }
 
+let heatmapsInited = false;
 function initHeatmaps() {
   if (!FINE_GRIDS) return;
   renderHeatmaps();
-  initHeatmap(0);
-  initHeatmap(1);
+  if (!heatmapsInited) {
+    initHeatmap(0);
+    initHeatmap(1);
+    heatmapsInited = true;
+  }
 }
 
 // ── Summary rows ──────────────────────────────────────────────────────────────
@@ -957,7 +961,7 @@ function loadAndApplyDetails() {
       if (src)  src.setData((BOUNDARIES      && BOUNDARIES[key])      || empty);
       if (fsrc) fsrc.setData((FINE_BOUNDARIES && FINE_BOUNDARIES[key]) || empty);
     });
-    renderHeatmaps();
+    initHeatmaps();
     renderPoleMarkers();
     updateBoundaryVisibility();
   });
