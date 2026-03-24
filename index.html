@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Great Circles — Wettest &amp; Driest</title>
 <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+<link rel="manifest" href="/greatcircle/manifest.json">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
 <style>
@@ -35,7 +36,7 @@
     font-size: 11px; color: #888; margin-bottom: 10px; letter-spacing: 2px;
     border-bottom: 1px solid #2a2a2a; padding-bottom: 7px;
   }
-  #panel-body { overflow: hidden; }
+  #panel-body { overflow: visible; }
 
   /* ── Summary rows ── */
   #summary { margin-bottom: 4px; }
@@ -68,7 +69,7 @@
     overflow: hidden; max-height: 0; opacity: 0;
     transition: max-height 0.3s ease, opacity 0.25s ease;
   }
-  .section-body.open { max-height: 2000px; opacity: 1; }
+  .section-body.open { max-height: 2000px; opacity: 1; overflow: visible; }
 
   /* ── Layer toggles ── */
   .row { display: flex; align-items: center; margin: 6px 0; gap: 8px; cursor: pointer; }
@@ -110,7 +111,7 @@
     font-size: 10px; letter-spacing: 0; line-height: 1.5; font-weight: normal;
     padding: 6px 9px; border-radius: 4px; pointer-events: none;
     opacity: 0; transition: opacity 0.15s; width: max-content; max-width: 220px;
-    white-space: normal; text-align: left; z-index: 10;
+    white-space: normal; text-align: left; z-index: 1000;
   }
   #dataset-switcher button:hover::after { opacity: 1; }
   #dataset-switcher button:last-child::after { left: auto; right: 0; transform: none; }
