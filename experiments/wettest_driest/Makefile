@@ -1,4 +1,4 @@
-ETOPO1     = ../../data/ETOPO1_Ice_c_gdal.grd
+ETOPO1     = ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc
 GEBCO      = ../../data/GEBCO/GEBCO_2025_sub_ice.nc
 LAKES_SHP  = ../../data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp
 LAKES_MASK = ../../data/lakes_mask.npy

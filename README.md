@@ -12,16 +12,16 @@ Chabukswar & Mukherjee (2018) found the longest *uninterrupted* great-circle pat
 
 Two elevation datasets are supported and can be switched in the visualiser. Both use elevation ≤ 0 m as the water definition.
 
-| | ETOPO1 (default) | GEBCO 2025 Sub-Ice |
+| | ETOPO 2022 (default) | GEBCO 2025 Sub-Ice |
 |---|---|---|
 | Source | NOAA | General Bathymetric Chart of the Oceans |
 | Resolution | 1 arc-minute (~1.85 km) | 15 arc-second (~450 m) |
 | Ice treatment | Ice-surface elevation | Sub-ice bed topography |
-| File | `ETOPO1_Ice_c_gdal.grd` | `GEBCO_2025_sub_ice.nc` |
-| Size | ~450 MB | ~3.7 GB |
-| Download | [ngdc.noaa.gov](https://www.ngdc.noaa.gov/mgg/global/) | [gebco.net](https://www.gebco.net/data_and_products/gridded_bathymetry_data/) |
+| File | `ETOPO_2022_v1_60s_N90W180_surface.nc` | `GEBCO_2025_sub_ice.nc` |
+| Size | ~457 MB | ~3.7 GB |
+| Download | [ncei.noaa.gov](https://www.ncei.noaa.gov/products/etopo-global-relief-model) | [gebco.net](https://www.gebco.net/data_and_products/gridded_bathymetry_data/) |
 
-The ice treatment difference matters: GEBCO classifies the sub-ice beds of Greenland and Antarctica (largely below sea level) as water, while ETOPO1 classifies the ice surface as land. This accounts for the ~5 percentage point difference in wettest scores between the two datasets.
+The ice treatment difference matters: GEBCO classifies the sub-ice beds of Greenland and Antarctica (largely below sea level) as water, while ETOPO 2022 classifies the ice surface as land. This accounts for the ~5 percentage point difference in wettest scores between the two datasets.
 
 **HydroLAKES** (optional, GEBCO only) — polygon dataset of lakes and reservoirs ≥ 10 ha worldwide (~1.4 M features, [hydrosheds.org](https://www.hydrosheds.org/products/hydrolakes)). When enabled, lake surfaces above sea level are also counted as water. This variant is available as a toggle in the visualiser alongside the GEBCO dataset.
 
@@ -55,14 +55,14 @@ The grid must be sampled **uniformly in cos(θ)**, not uniformly in θ, to give 
 
 | Dataset | | Pole location | Score |
 |---|---|---|---|
-| **ETOPO1** | Wettest | 24.1°N 79.5°E | **91.57% ocean** |
-| **ETOPO1** | Driest | 6.5°S 25.4°E | **57.68% land** |
+| **ETOPO 2022** | Wettest | 24.1°N 79.6°E | **91.56% ocean** |
+| **ETOPO 2022** | Driest | 6.6°S 25.2°E | **57.69% land** |
 | **GEBCO** | Wettest | 6.3°S 63.4°E | **96.32% ocean** |
 | **GEBCO** | Driest | 13.0°N 15.3°E | **53.11% land** |
 | **GEBCO + lakes** | Wettest | 6.3°S 63.4°E | **96.32% ocean** |
 | **GEBCO + lakes** | Driest | 13.0°N 15.3°E | **51.55% land** |
 
-The two datasets find different wettest circles (ETOPO1: Indian subcontinent axis; GEBCO: Indian Ocean axis) but similar driest circles (both cross central Africa and Asia). The ~5 pp wettest score difference is explained by ice sheet treatment — see the Data section.
+The two datasets find different wettest circles (ETOPO 2022: Indian subcontinent axis; GEBCO: Indian Ocean axis) but similar driest circles (both cross central Africa and Asia). The ~5 pp wettest score difference is explained by ice sheet treatment — see the Data section.
 
 The wettest circle tilts through the Indian Ocean, western Pacific and Arctic — almost entirely open water. The driest circle threads through central Africa, Europe, central Asia and North America, crossing the major continental land masses.
 
@@ -85,7 +85,7 @@ experiments/
     gebco_visuals.json              GEBCO map data (initial load)
     gebco_details.json              GEBCO detail data (lazy-loaded)
 data/
-  ETOPO1_Ice_c_gdal.grd             Not in repo (~450 MB)
+  ETOPO_2022_v1_60s_N90W180_surface.nc  Not in repo (~457 MB)
   GEBCO/GEBCO_2025_sub_ice.nc       Not in repo (~3.7 GB)
   lakes_mask.npy                    Rasterised HydroLAKES (~500 MB, generated)
   HydroLAKES_polys_v10_shp/         Not in repo
@@ -107,8 +107,8 @@ python3 add_boundaries.py ../../data/GEBCO/GEBCO_2025_sub_ice.nc --lakes-mask ..
 python3 visualize.py
 
 # ETOPO1
-python3 great_circles.py ../../data/ETOPO1_Ice_c_gdal.grd --workers 8
-python3 add_boundaries.py ../../data/ETOPO1_Ice_c_gdal.grd --results etopo1.json
+python3 great_circles.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc --workers 8
+python3 add_boundaries.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc --results etopo1.json
 python3 visualize.py --input etopo1.json --output etopo1_visuals.json --details-output etopo1_details.json
 
 # Cross-dataset comparison
