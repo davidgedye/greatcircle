@@ -1,6 +1,7 @@
 # Wettest and Driest Great Circles on Earth
+A “great circle” is any full circumference of the Earth. If the center of a circle is the center of the Earth,  you have a great circle. The equator is a great circle, and so is any circle that goes through both poles, but the circle can be tilted at any angle, and cross the equator at any two opposite points.
 
-Find the great circle around Earth that maximises ocean/water surface coverage ("wettest") and the one that minimises it ("driest"). "Wet" and "dry" refer purely to binary land/water coverage — not precipitation.
+This project checks all possible great circles and finds the one that maximizes the ocean coverage (the "wettest") and the one that minimizes it (the "driest"). 
 
 An interactive visualisation is hosted at **https://davidgedye.github.io/greatcircle/**.
 
