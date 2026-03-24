@@ -24,9 +24,9 @@ Two elevation datasets are supported and can be switched in the visualiser. Both
 
 The ice treatment difference matters: GEBCO classifies the sub-ice beds of Greenland and Antarctica (largely below sea level) as water, while ETOPO 2022 classifies the ice surface as land. This accounts for the ~5 percentage point difference in wettest scores between the two datasets.
 
-**HydroLAKES** (optional, GEBCO only) — polygon dataset of lakes and reservoirs ≥ 10 ha worldwide (~1.4 M features, [hydrosheds.org](https://www.hydrosheds.org/products/hydrolakes)). When enabled, lake surfaces above sea level are also counted as water. This variant is available as a toggle in the visualiser alongside the GEBCO dataset.
+**HydroLAKES** — polygon dataset of lakes and reservoirs ≥ 10 ha worldwide (~1.4 M features, [hydrosheds.org](https://www.hydrosheds.org/products/hydrolakes)). Used in two ways: (1) for GEBCO, an optional "include lakes" toggle counts lake surfaces above sea level as water; (2) for both datasets, the mask is applied in *reverse* to suppress sub-sea-level lake-bed artefacts (see below).
 
-**Sub-sea-level lake beds (GEBCO artefact).** GEBCO records the actual bed topography of freshwater lakes. Several large lakes have beds that dip below sea level — Lake Superior's bed reaches −223 m (surface 183 m, max depth 406 m), Lake Michigan's reaches −105 m (surface 176 m, max depth 281 m). Because the water/land threshold is elevation ≤ 0 m, the deep central portions of these lakes are classified as water while the shallower margins are classified as land, producing spurious land/water transitions scattered across the lake interior. To suppress this artefact, `add_boundaries.py` applies the HydroLAKES mask in *reverse* for non-lakes experiments: any cell that falls within a lake polygon is forced to land, removing the false transitions. Toggling the lakes checkbox in the visualiser switches to the fully correct treatment where the entire lake surface is counted as water.
+**Sub-sea-level lake beds (artefact in both datasets).** Both GEBCO and ETOPO record actual lake bed topography. Several large lakes have beds that dip below sea level — Lake Superior's bed reaches −223 m (surface 183 m), Lake Michigan's −105 m, and Lake Baikal's −1,186 m (surface 456 m, max depth 1,642 m). Because the water/land threshold is elevation ≤ 0 m, the deep central portions of these lakes are classified as water while the shallower margins are classified as land, producing spurious land/water transitions scattered across the lake interior. To suppress this artefact, `add_boundaries.py` applies the HydroLAKES mask in *reverse*: any cell that falls within a lake polygon is forced to land, removing the false transitions. For GEBCO, toggling the lakes checkbox in the visualiser switches to the fully correct treatment where the entire lake surface is counted as water.
 
 Place data files under `data/` at the repo root (not committed — too large).
 
@@ -36,7 +36,7 @@ Place data files under `data/` at the repo root (not committed — too large).
 
 A great circle is uniquely identified by its plane's normal vector **n**, expressed in spherical coordinates as (θ, φ):
 
-- **θ** (colatitude): 0°–180°
+- **θ** (colatitude): 0°–180° — measured from the North Pole, so θ = 90° − latitude
 - **φ** (longitude): 0°–180° — antipodal symmetry halves the search space
 
 The grid must be sampled **uniformly in cos(θ)**, not uniformly in θ, to give equal solid-angle coverage. A naive linear grid in θ would oversample near the poles of normal-vector space.
@@ -52,18 +52,18 @@ The grid must be sampled **uniformly in cos(θ)**, not uniformly in θ, to give 
 **Stage 2 — Fine zoom**
 - Top 10 coarse candidates are each refined
 - ±2° window around each seed at 0.05° step size (80×80 grid per candidate)
-- Full search surface saved to `results.json` for visualisation
+- Full search surface saved to `gebco.json` / `etopo.json` for visualisation
 
 ## Results
 
 | Dataset | | Pole location | Score |
 |---|---|---|---|
-| **ETOPO 2022** | Wettest | 24.1°N 79.6°E | **91.56% ocean** |
-| **ETOPO 2022** | Driest | 6.6°S 25.2°E | **57.69% land** |
-| **GEBCO** | Wettest | 6.3°S 63.4°E | **96.32% ocean** |
-| **GEBCO** | Driest | 13.0°N 15.3°E | **53.11% land** |
-| **GEBCO + lakes** | Wettest | 6.3°S 63.4°E | **96.32% ocean** |
-| **GEBCO + lakes** | Driest | 13.0°N 15.3°E | **51.55% land** |
+| **ETOPO 2022** | Wettest | 24.14°N 79.58°E | **91.56% ocean** |
+| **ETOPO 2022** | Driest | 6.57°S 25.22°E | **57.69% land** |
+| **GEBCO** | Wettest | 6.31°S 63.38°E | **96.32% ocean** |
+| **GEBCO** | Driest | 12.96°N 15.28°E | **53.11% land** |
+| **GEBCO + lakes** | Wettest | 6.31°S 63.38°E | **96.32% ocean** |
+| **GEBCO + lakes** | Driest | 13.01°N 15.28°E | **51.55% land** |
 
 The two datasets find different wettest circles (ETOPO 2022: Indian subcontinent axis; GEBCO: Indian Ocean axis) but similar driest circles (both cross central Africa and Asia). The ~5 pp wettest score difference is explained by ice sheet treatment — see the Data section.
 
@@ -77,20 +77,21 @@ experiments/
   wettest_driest/
     great_circles.py                Search algorithm — writes results JSON
     add_boundaries.py               Augments results with land/water boundary points
-    make_lakes_mask.py              Rasterises HydroLAKES onto the GEBCO grid
+    make_lakes_mask.py              Rasterises HydroLAKES onto a GEBCO or ETOPO grid
     visualize.py                    Converts results JSON → web-ready JSON
     compare_datasets.py             Cross-dataset comparison table
     Makefile                        Full pipeline
-    etopo1.json                     ETOPO1 search results
-    results.json                    GEBCO search results (oceans + lakes variants)
-    etopo1_visuals.json             ETOPO1 map data (initial load)
-    etopo1_details.json             ETOPO1 detail data (lazy-loaded)
+    etopo.json                      ETOPO search results
+    gebco.json                      GEBCO search results (oceans + lakes variants)
+    etopo_visuals.json              ETOPO map data (initial load)
+    etopo_details.json              ETOPO detail data (lazy-loaded)
     gebco_visuals.json              GEBCO map data (initial load)
     gebco_details.json              GEBCO detail data (lazy-loaded)
 data/
   ETOPO_2022_v1_60s_N90W180_surface.nc  Not in repo (~457 MB)
   GEBCO/GEBCO_2025_sub_ice.nc       Not in repo (~3.7 GB)
-  lakes_mask.npy                    Rasterised HydroLAKES (~500 MB, generated)
+  lakes_mask.npy                    Rasterised HydroLAKES on GEBCO grid (~500 MB, generated)
+  etopo_lakes_mask.npy              Rasterised HydroLAKES on ETOPO grid (~28 MB, generated)
   HydroLAKES_polys_v10_shp/         Not in repo
 ```
 
@@ -109,10 +110,11 @@ python3 great_circles.py ../../data/GEBCO/GEBCO_2025_sub_ice.nc --workers 8 --pt
 python3 add_boundaries.py ../../data/GEBCO/GEBCO_2025_sub_ice.nc --lakes-mask ../../data/lakes_mask.npy
 python3 visualize.py
 
-# ETOPO1
+# ETOPO
+python3 make_lakes_mask.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc ../../data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp ../../data/etopo_lakes_mask.npy
 python3 great_circles.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc --workers 8
-python3 add_boundaries.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc --results etopo1.json
-python3 visualize.py --input etopo1.json --output etopo1_visuals.json --details-output etopo1_details.json
+python3 add_boundaries.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc --results etopo.json --lakes-mask ../../data/etopo_lakes_mask.npy
+python3 visualize.py --input etopo.json --output etopo_visuals.json --details-output etopo_details.json
 
 # Cross-dataset comparison
 make compare

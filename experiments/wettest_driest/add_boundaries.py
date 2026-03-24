@@ -1,12 +1,13 @@
 """
-add_boundaries.py — Augment results.json with land/water boundary points.
+add_boundaries.py — Augment a results JSON with land/water boundary points.
 
-Streams GEBCO in horizontal strips to avoid loading the full ~3.7 GB mask.
+Streams the elevation file in horizontal strips to avoid loading it fully into RAM.
 Computes boundaries for the best coarse result and the best fine result only.
 
 Usage:
     python3 add_boundaries.py data/GEBCO/GEBCO_2025_sub_ice.nc
     python3 add_boundaries.py data/GEBCO/GEBCO_2025_sub_ice.nc --lakes-mask data/lakes_mask.npy
+    python3 add_boundaries.py data/ETOPO_2022_v1_60s_N90W180_surface.nc --results etopo.json --lakes-mask data/etopo_lakes_mask.npy
 """
 
 import argparse
@@ -154,7 +155,7 @@ def main():
                         help='Sample points per circle (default 86400)')
     parser.add_argument('--strip-rows', type=int, default=500,
                         help='GEBCO rows per strip (default 500, ~40 MB each)')
-    parser.add_argument('--results', default='results.json')
+    parser.add_argument('--results', default='gebco.json')
     args = parser.parse_args()
 
     with open(args.results) as f:

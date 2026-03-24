@@ -1,5 +1,5 @@
 """
-visualize.py — Read results.json and write visuals.json for the interactive globe.
+visualize.py — Read a results JSON and write visuals JSON for the interactive globe.
 
 Usage:
     python3 visualize.py
@@ -29,7 +29,7 @@ zoom_others = ['interpolate', ['exponential', 2], ['zoom'], 0, 1,   5, 1,   10, 
 
 # ---------- Load results ----------
 
-def load_results(path='results.json'):
+def load_results(path='gebco.json'):
     import os, sys
     if not os.path.exists(path):
         print(f'ERROR: {path} not found — run great_circles.py first.')
@@ -177,7 +177,7 @@ def write_details_json(fine_grids, boundaries, fine_boundaries, output='gebco_de
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument('--input',          default='results.json')
+    ap.add_argument('--input',          default='gebco.json')
     ap.add_argument('--output',         default='gebco_visuals.json')
     ap.add_argument('--details-output', default='gebco_details.json')
     args = ap.parse_args()

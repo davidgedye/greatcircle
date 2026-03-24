@@ -8,9 +8,9 @@ For each dataset:
 
 Usage:
     python3 compare_datasets.py \\
-        data/ETOPO1_Ice_c_gdal.grd  data/GEBCO/GEBCO_2025_sub_ice.nc \\
-        --label-a ETOPO1  --label-b GEBCO \\
-        --results-a etopo1.json  --results-b results.json
+        data/ETOPO_2022_v1_60s_N90W180_surface.nc  data/GEBCO/GEBCO_2025_sub_ice.nc \\
+        --label-a ETOPO  --label-b GEBCO \\
+        --results-a etopo.json  --results-b gebco.json
 
     # Let the script run both searches from scratch:
     python3 compare_datasets.py A.nc B.nc --workers 8 --pts 3600
@@ -38,7 +38,7 @@ from great_circles import (
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def run_search(mask, grid, args, label):
-    """Run coarse + fine search and return a results dict matching results.json format."""
+    """Run coarse + fine search and return a results dict matching gebco.json / etopo.json format."""
     print(f"\n{'='*60}")
     print(f"  Searching {label} ...")
     print(f"{'='*60}")
