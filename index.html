@@ -145,7 +145,7 @@
       display: flex; align-items: center;
     }
     #panel h3, .section-hdr, .section-body { display: none; }
-    #summary { display: flex; flex-direction: row; align-items: baseline; gap: 12px; margin: 0; }
+    #summary { display: flex; flex-direction: row; align-items: baseline; gap: 12px; margin: 0; justify-content: center; width: 100%; }
     .summary-row { padding: 0; flex-direction: row; align-items: baseline; gap: 5px; }
     .summary-row + .summary-row { border-top: none; }
     .row-info { flex-direction: row; align-items: baseline; gap: 5px; }
@@ -155,6 +155,7 @@
     #mobile-hint {
       display: block; margin-top: 3px;
       font-size: 10px; color: #888; letter-spacing: 0.3px;
+      text-align: center; width: 100%;
     }
     #style-switcher { flex-direction: column; gap: 4px; }
     #style-switcher span { display: none; }
@@ -952,9 +953,20 @@ function switchDataset(idx) {
   fetch(ds.url).then(r => r.json()).then(d => {
     applyDataset(d);
 
-    // Update all great-circle line sources
+    // Update or add all great-circle line sources/layers
     LAYERS.forEach(l => {
-      if (map.getSource(l.id)) map.getSource(l.id).setData(DATA[l.id]);
+      if (map.getSource(l.id)) {
+        map.getSource(l.id).setData(DATA[l.id]);
+      } else {
+        // Layer didn't exist in previous dataset (e.g. lakes variants) — add it now
+        map.addSource(l.id, { type: 'geojson', data: DATA[l.id] });
+        const paint = { 'line-color': l.color, 'line-width': l.width, 'line-opacity': l.opacity };
+        if (l.dashed) paint['line-dasharray'] = [5, 4];
+        map.addLayer({
+          id: l.id, type: 'line', source: l.id, paint,
+          layout: { 'line-cap': l.dashed ? 'butt' : 'round', 'line-join': 'round', 'visibility': 'none' },
+        }, 'boundaries-wet');
+      }
     });
 
     // Clear boundary sources until details loads
