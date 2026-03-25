@@ -92,6 +92,7 @@
   let points = [null, null]; // [A, B], each {lat, lon}
   let markers = [null, null];
   let clickCount = 0;
+  const undoStack = [];
 
   // ── UI helpers ──────────────────────────────────────────────────────────────
   const hudStatus   = document.getElementById('hud-status');
@@ -185,6 +186,34 @@
     return pts;
   }
 
+
+  // Split a [[lon,lat],...] array at antimeridian crossings into multiple arrays.
+  // Without this, Mapbox draws a chord straight through the globe for any pair
+  // of adjacent points whose longitudes straddle ±180°.
+  // NOTE: this does not fix the separate Mapbox globe projection artefacts near
+  // the poles — see README Known Issues and mapbox-gl-js issue #12026.
+  function splitAtAntimeridian(coords) {
+    if (coords.length < 2) return [coords];
+    const result = [];
+    let cur = [coords[0]];
+    for (let i = 1; i < coords.length; i++) {
+      const [pLon, pLat] = cur[cur.length - 1];
+      const [lon, lat]   = coords[i];
+      if (Math.abs(lon - pLon) > 180) {
+        const sign      = lon < pLon ? 1 : -1;
+        const unwrapped = lon + sign * 360;
+        const t         = (sign * 180 - pLon) / (unwrapped - pLon);
+        const crossLat  = pLat + t * (lat - pLat);
+        cur.push([sign * 180, crossLat]);
+        if (cur.length >= 2) result.push(cur);
+        cur = [[-sign * 180, crossLat], [lon, lat]];
+      } else {
+        cur.push([lon, lat]);
+      }
+    }
+    if (cur.length >= 2) result.push(cur);
+    return result;
+  }
 
   // Subsample every nth point for display
   function subsample(pts, n) {
@@ -377,6 +406,7 @@
     map.on('click', e => {
       const { lat, lng: lon } = e.lngLat;
       if (!isFinite(lat) || !isFinite(lon)) return;
+      saveUndo();
       const idx = clickCount % 2;
       clickCount++;
       placeMarker(idx, lat, lon);
@@ -412,9 +442,10 @@
       if (coords[coords.length - 1] !== [pts[endIdx].lon, pts[endIdx].lat])
         coords.push([pts[endIdx].lon, pts[endIdx].lat]);
       const color = segLand ? COLOR_LAND : COLOR_OCEAN;
-      features.push({ type: 'Feature',
-        geometry: { type: 'LineString', coordinates: coords },
-        properties: { color } });
+      for (const seg of splitAtAntimeridian(coords))
+        features.push({ type: 'Feature',
+          geometry: { type: 'LineString', coordinates: seg },
+          properties: { color } });
     }
 
     for (let i = 1; i < pts.length; i++) {
@@ -429,6 +460,26 @@
     return features;
   }
 
+  // ── Undo ─────────────────────────────────────────────────────────────────────
+  function saveUndo() {
+    undoStack.push(points.map(p => p ? { ...p } : null));
+  }
+
+  function restoreState(snapshot) {
+    points = [null, null];
+    markers.forEach(m => m && m.remove());
+    markers = [null, null];
+    clickCount = 0;
+    map.getSource('gc-line').setData(emptyFC());
+    map.getSource('gc-highlight').setData(emptyFC());
+    setResult('', '');
+    hudSegments.textContent = '';
+    snapshot.forEach((p, i) => { if (p) { placeMarker(i, p.lat, p.lon); clickCount++; } });
+    if (points[0] && points[1]) computeAndDraw();
+    else if (points[0] || points[1]) setStatus('Click a second point');
+    else setStatus('Click two points');
+  }
+
   // ── Marker helpers ───────────────────────────────────────────────────────────
   function makeMarker(idx) {
     const el = document.createElement('div');
@@ -439,12 +490,15 @@
     ].join(';');
     el.textContent = '+';
     const m = new mapboxgl.Marker({ element: el, draggable: true, anchor: 'center' });
+    let dragSaved = false;
     m.on('drag', () => {
+      if (!dragSaved) { saveUndo(); dragSaved = true; }
       const ll = m.getLngLat();
       points[idx] = { lat: ll.lat, lon: ll.lng };
       if (points[0] && points[1]) drawFast();
     });
     m.on('dragend', () => {
+      dragSaved = false;
       if (points[0] && points[1]) computeAndDraw();
     });
     return m;
@@ -496,13 +550,15 @@
     // Draw highlight segments
     const highlights = [];
     const oceanCoords = segToCoords(allPts, stats.oceanSeg, displayStep);
-    if (oceanCoords) highlights.push({ type: 'Feature',
-      geometry: { type: 'LineString', coordinates: oceanCoords },
-      properties: { color: COLOR_OCEAN } });
+    if (oceanCoords) for (const seg of splitAtAntimeridian(oceanCoords))
+      highlights.push({ type: 'Feature',
+        geometry: { type: 'LineString', coordinates: seg },
+        properties: { color: COLOR_OCEAN } });
     const landCoords = segToCoords(allPts, stats.landSeg, displayStep);
-    if (landCoords) highlights.push({ type: 'Feature',
-      geometry: { type: 'LineString', coordinates: landCoords },
-      properties: { color: COLOR_LAND } });
+    if (landCoords) for (const seg of splitAtAntimeridian(landCoords))
+      highlights.push({ type: 'Feature',
+        geometry: { type: 'LineString', coordinates: seg },
+        properties: { color: COLOR_LAND } });
     map.getSource('gc-highlight').setData({ type: 'FeatureCollection', features: highlights });
   }
 
@@ -522,13 +578,14 @@
     const dragCoords = pts.map(p => [p.lon, p.lat]);
     map.getSource('gc-line').setData({
       type: 'FeatureCollection',
-      features: [{ type: 'Feature',
-        geometry: { type: 'LineString', coordinates: dragCoords },
-        properties: { color: COLOR_DRAG } }],
+      features: splitAtAntimeridian(dragCoords).map(seg => ({ type: 'Feature',
+        geometry: { type: 'LineString', coordinates: seg },
+        properties: { color: COLOR_DRAG } })),
     });
   }
 
-  function clearQuery() {
+  function clearQuery(pushUndo = true) {
+    if (pushUndo) saveUndo();
     map.getSource('gc-line').setData(emptyFC());
     map.getSource('gc-highlight').setData(emptyFC());
     setResult('', '');
@@ -553,7 +610,8 @@
   };
 
   function loadPaperLine(line) {
-    clearQuery();
+    saveUndo();
+    clearQuery(false);
     placeMarker(0, line.A.lat, line.A.lon);
     placeMarker(1, line.B.lat, line.B.lon);
     clickCount = 2;
@@ -565,6 +623,10 @@
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === 'o' || e.key === 'O') loadPaperLine(PAPER_OCEAN);
     if (e.key === 'l' || e.key === 'L') loadPaperLine(PAPER_LAND);
+    if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      if (undoStack.length) restoreState(undoStack.pop());
+    }
   });
 
   // ── Start mask fetch immediately ─────────────────────────────────────────────
