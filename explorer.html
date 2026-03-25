@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Great Circle Explorer</title>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+    #map { width: 100%; height: 100%; }
+
+    /* ── HUD ───────────────────────────────────────────────────────────────── */
+    #hud {
+      position: absolute;
+      bottom: 28px;
+      left: 12px;
+      background: rgba(0,0,0,0.72);
+      color: #fff;
+      font: 14px/1.5 'Helvetica Neue', sans-serif;
+      padding: 10px 14px;
+      border-radius: 6px;
+      min-width: 200px;
+      max-width: 260px;
+      pointer-events: none;
+      user-select: none;
+    }
+    #hud-status  { color: #aaa; font-size: 12px; margin-bottom: 4px; }
+    #hud-result  { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+    #hud-detail  { color: #aaa; font-size: 12px; margin-top: 2px; }
+
+    /* ── Color scale (heatmap mode) ────────────────────────────────────────── */
+    #colorscale {
+      display: none;
+      margin-top: 8px;
+    }
+    #colorscale-bar {
+      width: 100%;
+      height: 10px;
+      border-radius: 3px;
+      background: linear-gradient(to right, #e74c3c, #27ae60, #2980b9);
+      margin-bottom: 4px;
+    }
+    #colorscale-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #aaa;
+    }
+
+    /* ── Mode toggle ───────────────────────────────────────────────────────── */
+    #mode-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(0,0,0,0.72);
+      color: #fff;
+      font: 13px/1 'Helvetica Neue', sans-serif;
+      padding: 8px 14px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 5px;
+      cursor: pointer;
+      z-index: 10;
+    }
+    #mode-btn:hover { background: rgba(40,40,40,0.9); }
+    #clear-btn {
+      position: absolute;
+      top: 48px;
+      right: 12px;
+      background: rgba(0,0,0,0.72);
+      color: #fff;
+      font: 13px/1 'Helvetica Neue', sans-serif;
+      padding: 8px 14px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 5px;
+      cursor: pointer;
+      z-index: 10;
+    }
+    #clear-btn:hover { background: rgba(40,40,40,0.9); }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="hud">
+    <div id="hud-status">Loading mask…</div>
+    <div id="hud-result"></div>
+    <div id="hud-detail"></div>
+    <div id="hud-zoom" style="color:#666;font-size:11px;margin-top:6px;border-top:1px solid rgba(255,255,255,0.1);padding-top:5px;"></div>
+    <div id="colorscale">
+      <div id="colorscale-bar"></div>
+      <div id="colorscale-labels">
+        <span>42% ocean</span><span>92% ocean</span>
+      </div>
+    </div>
+  </div>
+
+  <button id="mode-btn">Heatmap mode</button>
+  <button id="clear-btn">Clear</button>
+
+  <script>
+  // ── Config ──────────────────────────────────────────────────────────────────
+  mapboxgl.accessToken = 'pk.eyJ1IjoiZGF2aWRnZWR5ZSIsImEiOiJjbWtvejk5bWkwYnBxM3JxNTE0ZjN6ZmowIn0.CaVScVkAo9uhpyebGqaQNg';
+
+  const MASK_NLAT = 10800;
+  const MASK_NLON = 21600;
+  const DISPLAY_PTS = 1080;   // points for drawing the line
+  const TRANSITION_PTS = 21600; // points for detecting transitions (60 arc-sec)
+
+  // ── State ───────────────────────────────────────────────────────────────────
+  let mask = null;           // Uint8Array (packed bits), loaded async
+  let maskReady = false;
+  let points = [null, null]; // [A, B], each {lat, lon}
+  let markers = [null, null];
+  let clickCount = 0;
+  let mode = 'query';        // 'query' | 'heatmap'
+
+  // ── UI helpers ──────────────────────────────────────────────────────────────
+  const hudStatus = document.getElementById('hud-status');
+  const hudResult = document.getElementById('hud-result');
+  const hudDetail = document.getElementById('hud-detail');
+  const hudZoom   = document.getElementById('hud-zoom');
+  const colorscale = document.getElementById('colorscale');
+  const modeBtn = document.getElementById('mode-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  clearBtn.addEventListener('click', clearQuery);
+
+  function setStatus(msg)  { hudStatus.textContent = msg; }
+  function setResult(main, detail) {
+    hudResult.textContent = main  || '';
+    hudDetail.textContent = detail || '';
+  }
+
+  // ── Mask loading ────────────────────────────────────────────────────────────
+  async function loadMask() {
+    try {
+      const resp = await fetch('explorer/mask_60s.bin.gz');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const ds = new DecompressionStream('gzip');
+      const piped = resp.body.pipeThrough(ds);
+      const buf = await new Response(piped).arrayBuffer();
+      mask = new Uint8Array(buf);
+      maskReady = true;
+      setStatus(mode === 'query' ? 'Click two points' : '');
+    } catch (e) {
+      setStatus('Mask load failed: ' + e.message);
+    }
+  }
+
+  function isLand(lat, lon) {
+    let row = Math.round((lat + 90) * 60);
+    let col = Math.round((lon + 180) * 60) % MASK_NLON;
+    row = Math.max(0, Math.min(MASK_NLAT - 1, row));
+    if (col < 0) col += MASK_NLON;
+    const i = row * MASK_NLON + col;
+    return (mask[i >> 3] >> (7 - (i & 7))) & 1;
+  }
+
+  // ── Great circle math ───────────────────────────────────────────────────────
+  function toXYZ(lat, lon) {
+    const φ = lat * Math.PI / 180, λ = lon * Math.PI / 180;
+    return [Math.cos(φ) * Math.cos(λ), Math.cos(φ) * Math.sin(λ), Math.sin(φ)];
+  }
+
+  function cross(a, b) {
+    return [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0],
+    ];
+  }
+
+  function norm(v) {
+    const m = Math.hypot(v[0], v[1], v[2]);
+    return m < 1e-12 ? v : v.map(x => x / m);
+  }
+
+  function gcNormal(latA, lonA, latB, lonB) {
+    const a = toXYZ(latA, lonA), b = toXYZ(latB, lonB);
+    const c = cross(a, b);
+    const len = Math.hypot(c[0], c[1], c[2]);
+    if (len < 1e-6) {
+      // Antipodal: pick arbitrary great circle through A
+      const arb = Math.abs(a[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+      return norm(cross(a, arb));
+    }
+    return norm(c);
+  }
+
+  function sampleGC(n, nPts) {
+    const arb = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const u = norm(cross(n, arb));
+    const v = cross(n, u);  // already unit
+    const pts = [];
+    for (let i = 0; i < nPts; i++) {
+      const t = 2 * Math.PI * i / nPts;
+      const cos_t = Math.cos(t), sin_t = Math.sin(t);
+      const p = [
+        cos_t * u[0] + sin_t * v[0],
+        cos_t * u[1] + sin_t * v[1],
+        cos_t * u[2] + sin_t * v[2],
+      ];
+      const lat = Math.asin(Math.max(-1, Math.min(1, p[2]))) * 180 / Math.PI;
+      const lon = Math.atan2(p[1], p[0]) * 180 / Math.PI;
+      pts.push({ lat, lon });
+    }
+    return pts;
+  }
+
+  // Subsample every nth point for display
+  function subsample(pts, n) {
+    const step = Math.max(1, Math.round(pts.length / n));
+    const out = [];
+    for (let i = 0; i < pts.length; i += step) out.push(pts[i]);
+    return out;
+  }
+
+  // Unwrap longitude jumps > 180° so Mapbox draws continuous lines
+  function unwrap(pts) {
+    if (!pts.length) return pts;
+    const out = [pts[0]];
+    for (let i = 1; i < pts.length; i++) {
+      let lon = pts[i].lon;
+      const prev = out[i - 1].lon;
+      while (lon - prev >  180) lon -= 360;
+      while (prev - lon >  180) lon += 360;
+      out.push({ lat: pts[i].lat, lon });
+    }
+    return out;
+  }
+
+  // ── Transition detection ────────────────────────────────────────────────────
+  function bearingTo(a, b) {
+    const φ1 = a.lat * Math.PI / 180, φ2 = b.lat * Math.PI / 180;
+    const Δλ = (b.lon - a.lon) * Math.PI / 180;
+    const x = Math.sin(Δλ) * Math.cos(φ2);
+    const y = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+    return (Math.atan2(x, y) * 180 / Math.PI + 360) % 360;
+  }
+
+  function findTransitions(pts) {
+    const out = [];
+    let prev = isLand(pts[0].lat, pts[0].lon);
+    for (let i = 1; i < pts.length; i++) {
+      const curr = isLand(pts[i].lat, pts[i].lon);
+      if (curr !== prev) {
+        const mid = {
+          lat: (pts[i - 1].lat + pts[i].lat) / 2,
+          lon: (pts[i - 1].lon + pts[i].lon) / 2,
+        };
+        const fwd = bearingTo(pts[i - 1], pts[i]);
+        // bearing always points toward land
+        mid.bearing = curr ? fwd : (fwd + 180) % 360;
+        out.push(mid);
+      }
+      prev = curr;
+    }
+    return out;
+  }
+
+  // ── Map ─────────────────────────────────────────────────────────────────────
+  const map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/light-v11',
+    projection: 'globe',
+    center: [20, 20],
+    zoom: 1.5,
+    attributionControl: false,
+  });
+  map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
+  map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+  map.addControl(new mapboxgl.ScaleControl({ maxWidth: 160, unit: 'metric' }), 'bottom-right');
+
+  const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
+
+  map.on('load', () => {
+    map.setFog({ color: '#000', 'high-color': '#000', 'horizon-blend': 0.02 });
+
+    // ── Great circle line (coloured by land/ocean) ────────────────────────
+    map.addSource('gc-line', { type: 'geojson', data: emptyFC() });
+    map.addLayer({
+      id: 'gc-line', type: 'line', source: 'gc-line',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': ['interpolate', ['exponential', 2], ['zoom'], 0, 1.5, 5, 2.5, 10, 7],
+        'line-opacity': 0.88,
+      },
+    });
+
+
+    // ── Transition arrows ────────────────────────────────────────────────────
+    map.addSource('transitions', { type: 'geojson', data: emptyFC() });
+    map.addLayer({
+      id: 'transitions', type: 'symbol', source: 'transitions',
+      layout: {
+        'text-field': '▲',
+        'text-size': ['interpolate', ['linear'], ['zoom'], 0, 7, 4, 11, 8, 18],
+        'text-rotate': ['get', 'bearing'],
+        'text-rotation-alignment': 'map',
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+      },
+      paint: {
+        'text-color': '#00e5ff',
+        'text-halo-color': '#000',
+        'text-halo-width': 1.5,
+        'text-opacity': 0.9,
+      },
+    });
+
+    // ── Heatmap raster tile overlay ──────────────────────────────────────────
+    map.addSource('heatmap-src', {
+      type: 'raster',
+      tiles: [`${location.origin}${location.pathname.replace(/\/[^/]*$/, '')}/explorer/tiles/{z}/{x}/{y}.png`],
+      tileSize: 256,
+      minzoom: 0,
+      maxzoom: 6,
+    });
+    map.addLayer({
+      id: 'heatmap-layer', type: 'raster', source: 'heatmap-src',
+      layout: { visibility: 'none' },
+      paint: { 'raster-opacity': 0.65, 'raster-fade-duration': 300 },
+    });
+
+    // ── Click handler ────────────────────────────────────────────────────────
+    map.on('click', e => {
+      const { lat, lng: lon } = e.lngLat;
+      if (!isFinite(lat) || !isFinite(lon)) return;
+      if (mode === 'query') {
+        const idx = clickCount % 2;
+        clickCount++;
+        placeMarker(idx, lat, lon);
+        if (points[0] && points[1]) {
+          computeAndDraw();
+        } else {
+          setStatus('Click a second point');
+        }
+      } else {
+        // Heatmap mode: clicked point is the great circle pole
+        drawFromPole(lat, lon);
+      }
+    });
+
+    // Zoom display
+    const updateZoom = () => hudZoom.textContent = `zoom ${map.getZoom().toFixed(2)}`;
+    map.on('zoom', updateZoom);
+    updateZoom();
+
+    // Cursor
+    map.on('mousemove', () => {
+      map.getCanvas().style.cursor = 'crosshair';
+    });
+
+    // Initial state
+    if (maskReady) {
+      setStatus('Click two points');
+    }
+  });
+
+  // ── Segment building ────────────────────────────────────────────────────────
+  // Split full-resolution points into land/ocean LineString features,
+  // subsampling coordinates within each segment for display performance.
+  function buildSegmentFeatures(pts, displayStep) {
+    if (pts.length < 2) return [];
+    const features = [];
+    let segStart = 0;
+    let segLand = isLand(pts[0].lat, pts[0].lon);
+
+    function flush(endIdx) {
+      if (endIdx - segStart < 1) return;
+      const coords = [];
+      for (let j = segStart; j <= endIdx; j += displayStep) coords.push([pts[j].lon, pts[j].lat]);
+      if (coords[coords.length - 1] !== [pts[endIdx].lon, pts[endIdx].lat])
+        coords.push([pts[endIdx].lon, pts[endIdx].lat]);
+      if (coords.length >= 2) features.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: coords },
+        properties: { color: segLand ? '#e53935' : '#00bcd4' },
+      });
+    }
+
+    for (let i = 1; i < pts.length; i++) {
+      const curr = isLand(pts[i].lat, pts[i].lon);
+      if (curr !== segLand) {
+        flush(i);
+        segStart = i;
+        segLand = curr;
+      }
+    }
+    flush(pts.length - 1);
+    return features;
+  }
+
+  // ── Marker helpers ───────────────────────────────────────────────────────────
+  function makeMarker(idx) {
+    const el = document.createElement('div');
+    el.style.cssText = [
+      'color:#fff', 'font-size:24px', 'font-weight:bold', 'line-height:1',
+      'text-shadow:0 0 3px #000,0 0 3px #000', 'cursor:grab', 'user-select:none',
+      'display:inline-block', 'width:fit-content',
+    ].join(';');
+    el.textContent = '+';
+    const m = new mapboxgl.Marker({ element: el, draggable: true, anchor: 'center' });
+    m.on('drag', () => {
+      const ll = m.getLngLat();
+      points[idx] = { lat: ll.lat, lon: ll.lng };
+      if (points[0] && points[1]) drawFast();
+    });
+    m.on('dragend', () => {
+      if (points[0] && points[1]) computeAndDraw();
+    });
+    return m;
+  }
+
+  function placeMarker(idx, lat, lon) {
+    points[idx] = { lat, lon };
+    if (!markers[idx]) {
+      markers[idx] = makeMarker(idx);
+      markers[idx].setLngLat([lon, lat]);
+      markers[idx].addTo(map);
+    } else {
+      markers[idx].setLngLat([lon, lat]);
+    }
+  }
+
+  // ── Render helpers ───────────────────────────────────────────────────────────
+
+  function computeAndDraw() {
+    if (!maskReady) { setStatus('Still loading mask…'); return; }
+
+    const [A, B] = points;
+    const n = gcNormal(A.lat, A.lon, B.lat, B.lon);
+
+    // Sample at full resolution for transitions
+    const allPts = sampleGC(n, TRANSITION_PTS);
+
+    // Compute transitions and fraction
+    const transitions = findTransitions(allPts);
+    let landCount = 0;
+    for (const p of allPts) landCount += isLand(p.lat, p.lon);
+    const oceanFrac = (1 - landCount / allPts.length) * 100;
+
+    // Display result
+    setStatus('');
+    setResult(`${oceanFrac.toFixed(1)}% ocean`, `${transitions.length} land/ocean transitions`);
+
+    // Draw line as land/ocean coloured segments (detect at full res, subsample for display)
+    const displayStep = Math.max(1, Math.round(TRANSITION_PTS / DISPLAY_PTS));
+    map.getSource('gc-line').setData({
+      type: 'FeatureCollection',
+      features: buildSegmentFeatures(unwrap(allPts), displayStep),
+    });
+  }
+
+  function drawFast() {
+    const [A, B] = points;
+    if (!A || !B) return;
+    const n = gcNormal(A.lat, A.lon, B.lat, B.lon);
+    const allPts = sampleGC(n, TRANSITION_PTS);
+    // Single pass: fraction only, no transitions or segment coloring
+    let landCount = 0;
+    for (const p of allPts) landCount += isLand(p.lat, p.lon);
+    const oceanFrac = (1 - landCount / allPts.length) * 100;
+    setResult(`${oceanFrac.toFixed(1)}% ocean`, '');
+    const pts = unwrap(subsample(allPts, DISPLAY_PTS));
+    map.getSource('gc-line').setData({
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature',
+        geometry: { type: 'LineString', coordinates: pts.map(p => [p.lon, p.lat]) },
+        properties: { color: '#aaa' } }],
+    });
+  }
+
+  function drawFromPole(lat, lon) {
+    if (!maskReady) { setStatus('Still loading mask…'); return; }
+    const n = toXYZ(lat, lon);
+    const allPts = sampleGC(n, TRANSITION_PTS);
+    const transitions = findTransitions(allPts);
+    let landCount = 0;
+    for (const p of allPts) landCount += isLand(p.lat, p.lon);
+    const oceanFrac = (1 - landCount / allPts.length) * 100;
+    setStatus('');
+    setResult(`${oceanFrac.toFixed(1)}% ocean`, `${transitions.length} land/ocean transitions`);
+    const displayStep = Math.max(1, Math.round(TRANSITION_PTS / DISPLAY_PTS));
+    map.getSource('gc-line').setData({
+      type: 'FeatureCollection',
+      features: buildSegmentFeatures(unwrap(allPts), displayStep),
+    });
+  }
+
+  function clearQuery() {
+    map.getSource('gc-line').setData(emptyFC());
+    setResult('', '');
+    points = [null, null];
+    markers.forEach(m => m && m.remove());
+    markers = [null, null];
+    clickCount = 0;
+  }
+
+  // ── Mode toggle ──────────────────────────────────────────────────────────────
+  modeBtn.addEventListener('click', () => {
+    mode = mode === 'query' ? 'heatmap' : 'query';
+    const heatmapOn = mode === 'heatmap';
+
+    if (map.getLayer('heatmap-layer')) {
+      map.setLayoutProperty('heatmap-layer', 'visibility', heatmapOn ? 'visible' : 'none');
+    }
+
+    modeBtn.textContent = heatmapOn ? 'Query mode' : 'Heatmap mode';
+    colorscale.style.display = heatmapOn ? 'block' : 'none';
+    clearBtn.style.display = heatmapOn ? 'none' : '';
+    map.getCanvas().style.cursor = heatmapOn ? '' : 'crosshair';
+
+    if (heatmapOn) {
+      // Remove query markers when entering heatmap mode
+      markers.forEach(m => m && m.remove());
+      markers = [null, null];
+      points = [null, null];
+      clickCount = 0;
+      setStatus(maskReady ? 'Click to set great circle axis' : 'Loading mask…');
+    } else {
+      map.getSource('gc-line').setData({ type: 'FeatureCollection', features: [] });
+      setResult('', '');
+      setStatus(maskReady ? 'Click two points' : 'Loading mask…');
+    }
+  });
+
+  // ── Start mask fetch immediately ─────────────────────────────────────────────
+  loadMask();
+  </script>
+</body>
+</html>
