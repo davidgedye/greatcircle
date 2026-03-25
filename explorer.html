@@ -185,6 +185,7 @@
     return pts;
   }
 
+
   // Subsample every nth point for display
   function subsample(pts, n) {
     const step = Math.max(1, Math.round(pts.length / n));
@@ -193,19 +194,6 @@
     return out;
   }
 
-  // Unwrap longitude jumps > 180° so Mapbox draws continuous lines
-  function unwrap(pts) {
-    if (!pts.length) return pts;
-    const out = [pts[0]];
-    for (let i = 1; i < pts.length; i++) {
-      let lon = pts[i].lon;
-      const prev = out[i - 1].lon;
-      while (lon - prev >  180) lon -= 360;
-      while (prev - lon >  180) lon += 360;
-      out.push({ lat: pts[i].lat, lon });
-    }
-    return out;
-  }
 
   // ── Transition detection ────────────────────────────────────────────────────
   function countTransitions(pts) {
@@ -273,7 +261,7 @@
       coords.push(indices[indices.length - 1]);
     // Unwrap longitudes
     const raw = coords.map(i => ({ lat: pts[i].lat, lon: pts[i].lon }));
-    return unwrap(raw).map(p => [p.lon, p.lat]);
+    return raw.map(p => [p.lon, p.lat]);
   }
 
   function fmtKm(km) {
@@ -423,11 +411,10 @@
       for (let j = segStart; j <= endIdx; j += displayStep) coords.push([pts[j].lon, pts[j].lat]);
       if (coords[coords.length - 1] !== [pts[endIdx].lon, pts[endIdx].lat])
         coords.push([pts[endIdx].lon, pts[endIdx].lat]);
-      if (coords.length >= 2) features.push({
-        type: 'Feature',
+      const color = segLand ? COLOR_LAND : COLOR_OCEAN;
+      features.push({ type: 'Feature',
         geometry: { type: 'LineString', coordinates: coords },
-        properties: { color: segLand ? COLOR_LAND : COLOR_OCEAN },
-      });
+        properties: { color } });
     }
 
     for (let i = 1; i < pts.length; i++) {
@@ -503,7 +490,7 @@
     const displayStep = Math.max(1, Math.round(TRANSITION_PTS / DISPLAY_PTS));
     map.getSource('gc-line').setData({
       type: 'FeatureCollection',
-      features: buildSegmentFeatures(unwrap(allPts), displayStep),
+      features: buildSegmentFeatures(allPts, displayStep),
     });
 
     // Draw highlight segments
@@ -531,11 +518,12 @@
     setResult(`${oceanFrac.toFixed(1)}% ocean`, '');
     hudSegments.textContent = '';
     map.getSource('gc-highlight').setData(emptyFC());
-    const pts = unwrap(subsample(allPts, DISPLAY_PTS));
+    const pts = subsample(allPts, DISPLAY_PTS);
+    const dragCoords = pts.map(p => [p.lon, p.lat]);
     map.getSource('gc-line').setData({
       type: 'FeatureCollection',
       features: [{ type: 'Feature',
-        geometry: { type: 'LineString', coordinates: pts.map(p => [p.lon, p.lat]) },
+        geometry: { type: 'LineString', coordinates: dragCoords },
         properties: { color: COLOR_DRAG } }],
     });
   }

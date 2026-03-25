@@ -175,3 +175,7 @@ The fine best result has an estimated positional uncertainty of ~10 km from:
 3. **Elevation threshold** — tidal flats can shift the effective coastline by 2–10 km
 
 Combined (RSS): ~7 km, rounded to 10 km for display.
+
+## Known issues
+
+**Line rendering artefacts near the poles (Mapbox GL JS bug).** When the globe is oriented to show either pole, lines passing near a pole may render with banded fuzziness at certain zoom levels, or as a large partial arc rather than a tight curve. This is a known, unresolved bug in Mapbox GL JS globe projection ([issue #12026](https://github.com/mapbox/mapbox-gl-js/issues/12026), open since June 2022). The root cause is that the renderer draws line segments as straight lines in projected tile space, which breaks down at extreme latitudes. No workaround is available within the current Mapbox API; the code passes correct densely-sampled GeoJSON and will render properly if/when Mapbox fixes the underlying issue.
