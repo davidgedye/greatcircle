@@ -120,6 +120,7 @@
       mask = new Uint8Array(buf);
       maskReady = true;
       setStatus('Click two points');
+      updateGrid(); // fill cells now that mask is available
     } catch (e) {
       setStatus('Mask load failed: ' + e.message);
     }
@@ -359,6 +360,15 @@
 
 
     // ── 60 arc-second discretization grid (visible at zoom ≥ 8) ────────────
+    map.addSource('grid-fill', { type: 'geojson', data: emptyFC() });
+    map.addLayer({
+      id: 'grid-fill', type: 'fill', source: 'grid-fill',
+      paint: {
+        'fill-color': ['get', 'color'],
+        'fill-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0, 9, 0.3],
+      },
+    });
+
     map.addSource('grid', { type: 'geojson', data: emptyFC() });
     map.addLayer({
       id: 'grid', type: 'line', source: 'grid',
@@ -376,7 +386,11 @@
 
   function updateGrid() {
     if (!map.getSource('grid')) return;
-    if (map.getZoom() < 8) { map.getSource('grid').setData(emptyFC()); return; }
+    if (map.getZoom() < 8) {
+      map.getSource('grid').setData(emptyFC());
+      map.getSource('grid-fill').setData(emptyFC());
+      return;
+    }
     const b = map.getBounds();
     const step = 1 / 60;
     // Grid lines at multiples of 1/60° — these are the ETOPO cell boundaries
@@ -392,6 +406,24 @@
       features.push({ type: 'Feature', geometry: { type: 'LineString',
         coordinates: [[minLon, lat], [maxLon, lat]] }, properties: {} });
     map.getSource('grid').setData({ type: 'FeatureCollection', features });
+
+    // Shade each cell by land/ocean classification
+    if (maskReady) {
+      const fillFeatures = [];
+      for (let lon = minLon; lon < maxLon; lon += step) {
+        for (let lat = minLat; lat < maxLat; lat += step) {
+          const land = isLand(lat + step * 0.5, lon + step * 0.5);
+          fillFeatures.push({ type: 'Feature',
+            geometry: { type: 'Polygon', coordinates: [
+              [[lon, lat], [lon+step, lat], [lon+step, lat+step], [lon, lat+step], [lon, lat]]
+            ] },
+            properties: { color: land ? '#c8a96e' : '#5bb8d4' } });
+        }
+      }
+      map.getSource('grid-fill').setData({ type: 'FeatureCollection', features: fillFeatures });
+    } else {
+      map.getSource('grid-fill').setData(emptyFC());
+    }
   }
   map.on('moveend', updateGrid);
   map.on('zoomend', updateGrid);
