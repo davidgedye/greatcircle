@@ -133,20 +133,6 @@ def layers_for_experiment(key, exp_results):
 
 # ---------- Output ----------
 
-def boundaries_geojson(boundaries_per_circle):
-    """Convert list-of-lists of [lon, lat, to_water] into a GeoJSON FeatureCollection."""
-    features = []
-    for rank, pts in enumerate(boundaries_per_circle):
-        for pt in pts:
-            lon, lat, to_water, bearing = pt[0], pt[1], pt[2], pt[3]
-            features.append({
-                'type': 'Feature',
-                'properties': {'rank': rank, 'to_water': to_water, 'bearing': bearing},
-                'geometry': {'type': 'Point', 'coordinates': [lon, lat]},
-            })
-    return {'type': 'FeatureCollection', 'features': features}
-
-
 def _write_json(payload, path):
     s = json.dumps(payload, separators=(',', ':'))
     with open(path, 'w') as f:
@@ -162,12 +148,8 @@ def write_visuals_json(layers, best_fracs, output='etopo_visuals.json'):
     }, output)
 
 
-def write_details_json(fine_grids, boundaries, fine_boundaries, output='etopo_details.json'):
-    _write_json({
-        'fine_grids':      fine_grids,
-        'boundaries':      boundaries,
-        'fine_boundaries': fine_boundaries,
-    }, output)
+def write_details_json(fine_grids, output='etopo_details.json'):
+    _write_json({'fine_grids': fine_grids}, output)
 
 
 if __name__ == '__main__':
@@ -182,28 +164,20 @@ if __name__ == '__main__':
     layers = []
     best_fracs = {}
     fine_grids = {}
-    boundaries = {}
-    fine_boundaries = {}
 
     for key, exp_results in results.items():
         layers.extend(layers_for_experiment(key, exp_results))
         coarse = [tuple(r) for r in exp_results['coarse']]
-        invert = EXPERIMENT_META.get(key, {}).get('invert', False)
         if 'fine' in exp_results and exp_results['fine']:
             raw_frac = exp_results['fine'][0]['best_frac']
             fine_grids[key] = exp_results['fine'][0]
-            if 'boundaries' in exp_results['fine'][0]:
-                fine_boundaries[key] = boundaries_geojson([exp_results['fine'][0]['boundaries']])
         else:
             raw_frac = coarse[0][2]
         best_fracs[key] = raw_frac
-        if 'coarse_boundaries' in exp_results:
-            boundaries[key] = boundaries_geojson(exp_results['coarse_boundaries'])
 
     if not fine_grids:
         print(f'No fine results in {args.input} — heatmaps will be hidden')
         fine_grids = None
 
     write_visuals_json(layers, best_fracs, output=args.output)
-    write_details_json(fine_grids, boundaries or None, fine_boundaries or None,
-                       output=args.details_output)
+    write_details_json(fine_grids, output=args.details_output)

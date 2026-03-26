@@ -66,7 +66,6 @@ index.html                          Web visualisation (GitHub Pages root)
 experiments/
   wettest_driest/
     great_circles.py                Search algorithm — writes results JSON
-    add_boundaries.py               Augments results with land/water boundary points
     visualize.py                    Converts results JSON → web-ready JSON
     Makefile                        Full pipeline
     etopo.json                      Search results (gitignored, regenerated locally)
@@ -83,12 +82,11 @@ All commands run from `experiments/wettest_driest/`.
 ```bash
 pip install netCDF4 scipy numpy
 
-# Full pipeline (search → boundaries → web JSON)
+# Full pipeline (search → web JSON)
 make
 
 # Or step by step:
 python3 great_circles.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc --workers 8
-python3 add_boundaries.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc
 python3 visualize.py
 
 # Serve locally

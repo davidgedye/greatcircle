@@ -243,7 +243,7 @@
 <div id="click-result"></div>
 
 <script>
-let DATA, LAYERS, BEST_FRACS, FINE_GRIDS, BOUNDARIES, FINE_BOUNDARIES;
+let DATA, LAYERS, BEST_FRACS, FINE_GRIDS;
 
 // ── Dataset ───────────────────────────────────────────────────────────────────
 const VISUALS_URL = 'experiments/wettest_driest/etopo_visuals.json';
@@ -257,6 +257,160 @@ const INVERT = { wettest: false, driest: true };
 function WET()    { return 'wettest'; }
 function DRY()    { return 'driest'; }
 function ACTIVE() { return [WET(), DRY()]; }
+
+// ── Mask (land/ocean coloring) ────────────────────────────────────────────────
+const MASK_NLAT = 10800, MASK_NLON = 21600;
+const TRANSITION_PTS = 21600;   // one per arc-minute column — matches ETOPO resolution
+const COARSE_TRANSITION_PTS = 3600;  // sufficient for coarse-grid (~1°) circles
+const COLOR_SEG_OCEAN = '#00bcd4';
+const COLOR_SEG_LAND  = '#e53935';
+const COLOR_SEG_MUTED = '#bbb';
+let mask = null;
+let coarseSegmentsBuilt = false;
+
+async function loadMask() {
+  try {
+    const resp = await fetch('explorer/mask_60s.bin.gz');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const piped = resp.body.pipeThrough(new DecompressionStream('gzip'));
+    const buf = await new Response(piped).arrayBuffer();
+    mask = new Uint8Array(buf);
+    if (styleReady && dataReady) {
+      refreshFineSegments();
+      if (document.getElementById('details-body').classList.contains('open')) refreshCoarseSegments();
+    }
+  } catch (e) { console.warn('Mask load failed:', e.message); }
+}
+
+function isLand(lat, lon) {
+  // mask_60s.bin.gz: raw packed bits, 1=land 0=ocean, gzip-compressed.
+  // 10800 rows (south-to-north, row 0 = 90°S) × 21600 cols (west-to-east, col 0 = 180°W).
+  // Each ETOPO cell i occupies [i/60-90, (i+1)/60-90), so Math.floor gives the correct cell.
+  // Bit layout: byte i>>3, bit 7-(i&7) (MSB first, matching np.packbits default).
+  let row = Math.floor((lat + 90) * 60);
+  let col = Math.floor((lon + 180) * 60) % MASK_NLON;
+  row = Math.max(0, Math.min(MASK_NLAT - 1, row));
+  if (col < 0) col += MASK_NLON;
+  const i = row * MASK_NLON + col;
+  return (mask[i >> 3] >> (7 - (i & 7))) & 1;
+}
+
+function splitAtAntimeridian(coords) {
+  if (coords.length < 2) return [coords];
+  const result = [];
+  let cur = [coords[0]];
+  for (let i = 1; i < coords.length; i++) {
+    const [pLon, pLat] = cur[cur.length - 1];
+    const [lon, lat]   = coords[i];
+    if (Math.abs(lon - pLon) > 180) {
+      const sign = lon < pLon ? 1 : -1;
+      const unwrapped = lon + sign * 360;
+      const t = (sign * 180 - pLon) / (unwrapped - pLon);
+      cur.push([sign * 180, pLat + t * (lat - pLat)]);
+      if (cur.length >= 2) result.push(cur);
+      cur = [[-sign * 180, pLat + t * (lat - pLat)], [lon, lat]];
+    } else {
+      cur.push([lon, lat]);
+    }
+  }
+  if (cur.length >= 2) result.push(cur);
+  return result;
+}
+
+// pts: [[lon, lat], ...] at TRANSITION_PTS resolution; displayStep for coord subsampling.
+// thickOnLand: true → land segments are thick (driest), false → ocean segments are thick (wettest).
+function buildSegmentFeatures(pts, displayStep, thickOnLand) {
+  if (pts.length < 2) return [];
+  const features = [];
+  let segStart = 0;
+  let segLand = isLand(pts[0][1], pts[0][0]);
+
+  function flush(endIdx) {
+    if (endIdx - segStart < 1) return;
+    const coords = [];
+    for (let j = segStart; j <= endIdx; j += displayStep) coords.push(pts[j]);
+    if (coords[coords.length - 1] !== pts[endIdx]) coords.push(pts[endIdx]);
+    const thick = thickOnLand ? !!segLand : !segLand;
+    const color = thick ? (segLand ? COLOR_SEG_LAND : COLOR_SEG_OCEAN) : COLOR_SEG_MUTED;
+    for (const seg of splitAtAntimeridian(coords))
+      features.push({ type: 'Feature',
+        geometry: { type: 'LineString', coordinates: seg },
+        properties: { color, thick } });
+  }
+
+  for (let i = 1; i < pts.length; i++) {
+    const curr = isLand(pts[i][1], pts[i][0]);
+    if (curr !== segLand) { flush(i); segStart = i; segLand = curr; }
+  }
+  flush(pts.length - 1);
+  return features;
+}
+
+function refreshFineSegments() {
+  if (!mask || !DATA || !map.getSource('fine-segments')) return;
+  const features = [];
+  const displayStep = Math.max(1, Math.round(TRANSITION_PTS / 3600));
+  [WET(), DRY()].forEach(key => {
+    const fc = DATA[key + '-fine'];
+    if (!fc || !fc.features || !fc.features.length) return;
+    const { theta, phi } = fc.features[0].properties || {};
+    if (theta == null || phi == null) return;
+    const nVec = thetaPhiToNormal(theta, phi);
+    const ref = Math.abs(nVec[0]) < 0.9 ? [1,0,0] : [0,1,0];
+    const u = vnorm(vcross(nVec, ref));
+    const v = vcross(nVec, u);
+    const pts = [];
+    for (let i = 0; i < TRANSITION_PTS; i++) {
+      const t = 2 * Math.PI * i / TRANSITION_PTS;
+      const px = Math.cos(t)*u[0] + Math.sin(t)*v[0];
+      const py = Math.cos(t)*u[1] + Math.sin(t)*v[1];
+      const pz = Math.cos(t)*u[2] + Math.sin(t)*v[2];
+      pts.push([Math.atan2(py, px) * 180 / Math.PI,
+                Math.asin(Math.max(-1, Math.min(1, pz))) * 180 / Math.PI]);
+    }
+    const thickOnLand = key === DRY();
+    features.push(...buildSegmentFeatures(pts, displayStep, thickOnLand));
+  });
+  map.getSource('fine-segments').setData({ type: 'FeatureCollection', features });
+  // Hide the monochromatic fine lines — segments are the canonical display
+  [WET() + '-fine', DRY() + '-fine'].forEach(id => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+  });
+}
+
+function refreshCoarseSegments() {
+  if (!mask || !DATA) return;
+  const displayStep = Math.max(1, Math.round(COARSE_TRANSITION_PTS / 360));
+  ['wet', 'dry'].forEach(side => {
+    const src = map.getSource(`coarse-segments-${side}`);
+    if (!src) return;
+    const key = side === 'wet' ? WET() : DRY();
+    const fc = DATA[key + '-coarse'];
+    if (!fc || !fc.features) return;
+    const features = [];
+    fc.features.forEach(f => {
+      const { theta, phi } = f.properties || {};
+      if (theta == null || phi == null) return;
+      const nVec = thetaPhiToNormal(theta, phi);
+      const ref = Math.abs(nVec[0]) < 0.9 ? [1,0,0] : [0,1,0];
+      const u = vnorm(vcross(nVec, ref));
+      const v = vcross(nVec, u);
+      const pts = [];
+      for (let i = 0; i < COARSE_TRANSITION_PTS; i++) {
+        const t = 2 * Math.PI * i / COARSE_TRANSITION_PTS;
+        const px = Math.cos(t)*u[0] + Math.sin(t)*v[0];
+        const py = Math.cos(t)*u[1] + Math.sin(t)*v[1];
+        const pz = Math.cos(t)*u[2] + Math.sin(t)*v[2];
+        pts.push([Math.atan2(py, px) * 180 / Math.PI,
+                  Math.asin(Math.max(-1, Math.min(1, pz))) * 180 / Math.PI]);
+      }
+      features.push(...buildSegmentFeatures(pts, displayStep, side === 'dry'));
+    });
+    src.setData({ type: 'FeatureCollection', features });
+  });
+  coarseSegmentsBuilt = true;
+  applyCoarseVisibility();
+}
 
 function expFmt(key, frac) {
   return INVERT[key]
@@ -478,7 +632,7 @@ const STYLES = [
   { label: 'Outdoors',          url: 'mapbox://styles/mapbox/outdoors-v12' },
   { label: 'Light',             url: 'mapbox://styles/mapbox/light-v11' },
 ];
-const currentStyle = 'mapbox://styles/mapbox/satellite-streets-v12';
+const currentStyle = 'mapbox://styles/mapbox/light-v11';
 const sel = document.createElement('select');
 STYLES.forEach(s => {
   const opt = document.createElement('option');
@@ -620,40 +774,26 @@ let togglesBuilt = false;
 // Coarse visibility state — keyed by concept, not by experiment
 const coarseShow = { 'wet-coarse': false, 'dry-coarse': false };
 
-const BOUNDARY_LAYER_IDS = ['boundaries-wet', 'boundaries-dry', 'fine-boundaries-wet', 'fine-boundaries-dry'];
-const ARROW_ZOOM_THRESHOLD = 2;
-function setBoundaryVisibility(visible) {
-  const vis = visible ? 'visible' : 'none';
-  BOUNDARY_LAYER_IDS.forEach(id => {
-    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
-  });
-}
-function updateBoundaryVisibility() {
-  // Fine boundary arrows: show when Details open or zoomed in
-  const show = document.getElementById('details-body').classList.contains('open') || map.getZoom() >= ARROW_ZOOM_THRESHOLD;
-  const setVis = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
-  setVis('fine-boundaries-wet', show);
-  setVis('fine-boundaries-dry', show);
-}
 
 function applyCoarseVisibility() {
   const detailsOpen = document.getElementById('details-body').classList.contains('open');
   const [wetKey, dryKey] = ACTIVE();
   const wetVis = detailsOpen && coarseShow['wet-coarse'];
   const dryVis = detailsOpen && coarseShow['dry-coarse'];
-  const shouldShow = {
-    [wetKey + '-coarse']: wetVis,
-    [dryKey + '-coarse']: dryVis,
-  };
-  // Lines and their boundaries are set together — we never show one without the other
   const setVis = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
-  LAYERS.filter(l => !l.id.endsWith('-fine')).forEach(l => {
-    if (!map.getLayer(l.id)) return;
-    map.setLayoutProperty(l.id, 'visibility', shouldShow[l.id] ? 'visible' : 'none');
-  });
-  setVis('boundaries-wet', wetVis);
-  setVis('boundaries-dry', dryVis);
-  updateBoundaryVisibility();
+  if (coarseSegmentsBuilt) {
+    setVis('coarse-segments-wet', wetVis);
+    setVis('coarse-segments-dry', dryVis);
+    LAYERS.filter(l => !l.id.endsWith('-fine')).forEach(l => {
+      if (map.getLayer(l.id)) map.setLayoutProperty(l.id, 'visibility', 'none');
+    });
+  } else {
+    const shouldShow = { [wetKey + '-coarse']: wetVis, [dryKey + '-coarse']: dryVis };
+    LAYERS.filter(l => !l.id.endsWith('-fine')).forEach(l => {
+      if (!map.getLayer(l.id)) return;
+      map.setLayoutProperty(l.id, 'visibility', shouldShow[l.id] ? 'visible' : 'none');
+    });
+  }
 }
 
 function renderActiveLayers() {
@@ -751,34 +891,41 @@ function setupMapLayers() {
     layout: { 'line-cap': 'butt', 'line-join': 'round' }
   });
 
-  // Land/water boundary arrows
-  const _emptyFC = { type: 'FeatureCollection', features: [] };
-  function _arrowLayer(id, sourceId, color) {
-    return {
-      id, type: 'symbol', source: sourceId,
-      layout: {
-        'visibility': 'none',
-        'text-field': '▲',
-        'text-size': ['interpolate', ['linear'], ['zoom'], 0, 7, 4, 11, 8, 18],
-        'text-rotate': ['get', 'bearing'],
-        'text-rotation-alignment': 'map',
-        'text-allow-overlap': true,
-        'text-ignore-placement': true,
-      },
-      paint: {
-        'text-color': color,
-        'text-halo-color': '#000',
-        'text-halo-width': 1.5,
-        'text-opacity': 0.9,
-      },
-    };
-  }
-  ['wet', 'dry'].forEach((side, si) => {
-    map.addSource(`boundaries-${side}`,      { type: 'geojson', data: _emptyFC });
-    map.addSource(`fine-boundaries-${side}`, { type: 'geojson', data: _emptyFC });
-    map.addLayer(_arrowLayer(`boundaries-${side}`,      `boundaries-${side}`,      COLORS[si]));
-    map.addLayer(_arrowLayer(`fine-boundaries-${side}`, `fine-boundaries-${side}`, COLORS[si]));
+  // Fine circles colored by land/ocean using binary mask
+  map.addSource('fine-segments', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({
+    id: 'fine-segments', type: 'line', source: 'fine-segments',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': ['get', 'color'],
+      'line-width': ['interpolate', ['exponential', 2], ['zoom'],
+        0,  ['case', ['==', ['get', 'thick'], true], 2.5, 0.8],
+        5,  ['case', ['==', ['get', 'thick'], true], 4,   1.5],
+        10, ['case', ['==', ['get', 'thick'], true], 10,  4  ],
+      ],
+      'line-opacity': 0.9,
+    }
   });
+  if (mask) refreshFineSegments();
+
+  // Coarse circles colored by land/ocean (built lazily when details panel opens)
+  ['wet', 'dry'].forEach(side => {
+    map.addSource(`coarse-segments-${side}`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({
+      id: `coarse-segments-${side}`, type: 'line', source: `coarse-segments-${side}`,
+      layout: { 'line-cap': 'round', 'line-join': 'round', 'visibility': 'none' },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': ['interpolate', ['exponential', 2], ['zoom'],
+          0,  ['case', ['==', ['get', 'thick'], true], 1,   0.5],
+          5,  ['case', ['==', ['get', 'thick'], true], 1.5, 0.8],
+          10, ['case', ['==', ['get', 'thick'], true], 4,   2  ],
+        ],
+        'line-opacity': 0.65,
+      }
+    });
+  });
+  if (mask && coarseSegmentsBuilt) refreshCoarseSegments();
 
   // Hover tooltip
   const tip = document.getElementById('tooltip');
@@ -828,21 +975,11 @@ function setupMapLayers() {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 let styleReady = false, dataReady = false;
 
-map.on('zoomend', () => {
-  if (!styleReady || !dataReady) return;
-  if (map.getZoom() >= ARROW_ZOOM_THRESHOLD && !detailsData) {
-    loadAndApplyDetails();
-  } else {
-    updateBoundaryVisibility();
-  }
-});
-
 map.on('style.load', () => {
   styleReady = true;
   if (dataReady) {
     setupMapLayers();
-    const detailsOpen = document.getElementById('details-body').classList.contains('open');
-    if (detailsOpen || map.getZoom() >= ARROW_ZOOM_THRESHOLD) loadAndApplyDetails();
+    if (document.getElementById('details-body').classList.contains('open')) loadAndApplyDetails();
   }
 });
 
@@ -860,21 +997,17 @@ function regenCircleCoords(data) {
 }
 
 function applyDataset(d) {
-  DATA        = d.layers;
-  LAYERS      = d.layer_meta;
-  BEST_FRACS  = d.best_fracs || null;
-  FINE_GRIDS      = null;
-  BOUNDARIES      = null;
-  FINE_BOUNDARIES = null;
+  DATA       = d.layers;
+  LAYERS     = d.layer_meta;
+  BEST_FRACS = d.best_fracs || null;
+  FINE_GRIDS = null;
   regenCircleCoords(DATA);
 }
 
 let detailsData = null;
 
 function applyDetails(d) {
-  FINE_GRIDS      = d.fine_grids      || null;
-  BOUNDARIES      = d.boundaries      || null;
-  FINE_BOUNDARIES = d.fine_boundaries || null;
+  FINE_GRIDS = d.fine_grids || null;
 }
 
 function ensureDetails() {
@@ -885,17 +1018,9 @@ function ensureDetails() {
 function loadAndApplyDetails() {
   ensureDetails().then(d => {
     applyDetails(d);
-    const empty = { type: 'FeatureCollection', features: [] };
-    ['wet', 'dry'].forEach((side, si) => {
-      const key = ACTIVE()[si];
-      const src  = map.getSource(`boundaries-${side}`);
-      const fsrc = map.getSource(`fine-boundaries-${side}`);
-      if (src)  src.setData((BOUNDARIES      && BOUNDARIES[key])      || empty);
-      if (fsrc) fsrc.setData((FINE_BOUNDARIES && FINE_BOUNDARIES[key]) || empty);
-    });
     initHeatmaps();
     renderPoleMarkers();
-    updateBoundaryVisibility();
+    if (mask) refreshCoarseSegments();
   });
 }
 
@@ -908,6 +1033,8 @@ fetch(VISUALS_URL)
     if (styleReady) setupMapLayers();
   })
   .catch(err => console.error('Failed to load', VISUALS_URL, err));
+
+loadMask();
 </script>
 </body>
 </html>
