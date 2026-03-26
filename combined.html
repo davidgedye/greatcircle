@@ -23,43 +23,35 @@
       transition: max-height 0.4s ease;
       color: #ccc; font-size: 12px;
     }
-    body.state-loading   #banner,
-    body.state-animation #banner { max-height: 200px; }
-    body.state-explorer  #banner { max-height: 56px; }
-    body.state-revealed  #banner { max-height: 72px; }
-    body.state-detailed  #banner { max-height: 600px; }
-    @media (max-width: 640px) {
-      body.state-detailed #banner { max-height: 72px; }
-    }
+    #banner { max-height: 56px; }
 
     /* ── banner-anim ───────────────────────────────────────────────── */
     #banner-anim {
-      display: flex; align-items: stretch;
-      padding: 12px 16px; gap: 20px; min-height: 80px;
-    }
-    #banner-intro {
-      flex: 1; display: flex; flex-direction: column;
-      gap: 5px; justify-content: center;
+      display: flex; align-items: center;
+      padding: 0 16px; height: 56px; gap: 12px;
     }
     #anim-title {
-      font-size: 12px; color: #eee;
-      letter-spacing: 2px; text-transform: uppercase;
+      font-size: 11px; color: #888;
+      letter-spacing: 1px; text-transform: uppercase;
     }
-    #anim-desc { font-size: 11px; color: #777; line-height: 1.55; }
-    #banner-stats-anim {
-      display: flex; flex-direction: column; gap: 3px;
-      justify-content: center; align-items: flex-end;
-      min-width: 190px; text-align: right;
+    #anim-hint { font-size: 10px; color: #444; margin-left: auto; letter-spacing: 0.5px; }
+
+    /* ── banner-examine ────────────────────────────────────────────── */
+    #banner-examine {
+      display: none; align-items: center; gap: 12px;
+      padding: 0 16px; height: 56px; font-size: 12px;
     }
-    #anim-status { font-size: 11px; color: #555; }
-    #anim-pct { font-size: 18px; font-weight: bold; color: #fff; letter-spacing: 0.5px; }
-    #anim-transitions { font-size: 11px; color: #888; }
-    #anim-segments { font-size: 11px; color: #888; line-height: 1.6; }
-    #anim-hint { font-size: 10px; color: #444; margin-top: 5px; letter-spacing: 0.5px; }
+    #try-btn {
+      margin-left: auto; flex-shrink: 0;
+      background: rgba(255,255,255,0.07); color: #bbb;
+      border: 1px solid rgba(255,255,255,0.18); border-radius: 5px;
+      padding: 6px 16px; font-size: 10px; letter-spacing: 2px;
+      font-family: inherit; cursor: pointer; text-transform: uppercase;
+      transition: background 0.15s;
+    }
+    #try-btn:hover { background: rgba(255,255,255,0.15); }
     @media (max-width: 640px) {
-      #banner-anim { flex-direction: column; gap: 8px; padding: 10px 12px; min-height: 0; }
-      #banner-stats-anim { align-items: center; text-align: center; min-width: 0; }
-      #anim-hint { display: none; }
+      #banner-examine { gap: 8px; padding: 0 10px; }
     }
 
     /* ── banner-explorer ───────────────────────────────────────────── */
@@ -88,7 +80,7 @@
     /* ── banner-revealed ───────────────────────────────────────────── */
     #banner-revealed {
       display: none; align-items: center;
-      padding: 0 16px; height: 72px; gap: 20px;
+      padding: 0 16px; height: 56px; gap: 20px;
     }
     #rev-rows { display: flex; flex-direction: column; gap: 7px; flex: 1; }
     .rev-row { display: flex; align-items: center; gap: 8px; }
@@ -106,18 +98,23 @@
     #details-btn:hover { background: rgba(255,255,255,0.15); }
     @media (max-width: 640px) { .desktop-only { display: none !important; } }
 
-    /* ── banner-details ────────────────────────────────────────────── */
-    #banner-details {
-      display: none; flex-direction: row; gap: 24px;
-      padding: 12px 16px 16px; border-top: 1px solid #2a2a2a;
-      align-items: flex-start; overflow-x: auto;
+    /* ── Details panel (desktop only, floats over map on the right) ── */
+    #details-panel {
+      display: none; position: absolute;
+      top: 64px; right: 16px; bottom: 16px;
+      width: 220px; overflow-y: auto;
+      background: rgba(8,8,8,0.88); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 14px 14px 16px;
+      flex-direction: column; gap: 16px;
+      backdrop-filter: blur(6px); z-index: 10;
     }
-    #toggles { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; min-width: 140px; }
+    body.state-detailed #details-panel { display: flex; }
+    #toggles { display: flex; flex-direction: column; gap: 8px; }
     .tog-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .tog-row input { cursor: pointer; margin: 0; accent-color: #aaa; }
     .tog-swatch { width: 26px; height: 3px; border-radius: 1px; flex-shrink: 0; }
     .tog-row label { cursor: pointer; font-size: 11px; line-height: 1.4; color: #aaa; }
-    #heatmaps { display: flex; flex-direction: row; gap: 16px; }
+    #heatmaps { display: flex; flex-direction: column; gap: 12px; align-items: center; }
     .hm-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
     .hm-label { font-size: 10px; color: #888; letter-spacing: 1px; text-align: center; }
     .hm-pct   { font-size: 11px; font-weight: bold; }
@@ -125,7 +122,14 @@
       image-rendering: pixelated;
       border: 1px solid #333; border-radius: 2px; cursor: crosshair;
     }
-    @media (max-width: 640px) { #banner-details { display: none !important; } }
+    @media (max-width: 640px) {
+      #details-panel, #details-btn { display: none !important; }
+    }
+
+    /* ── Navigation controls ───────────────────────────────────────── */
+    body.state-loading   .mapboxgl-ctrl-top-left,
+    body.state-animation .mapboxgl-ctrl-top-left,
+    body.state-examine   .mapboxgl-ctrl-top-left { display: none !important; }
 
     /* ── Map & overlays ────────────────────────────────────────────── */
     #map { flex: 1; min-height: 0; }
@@ -136,8 +140,9 @@
       padding: 8px 10px; border: 1px solid rgba(255,255,255,0.2);
       border-radius: 5px; cursor: pointer; z-index: 10;
     }
-    body.state-loading  #style-select,
-    body.state-animation #style-select { display: none; }
+    body.state-loading   #style-select,
+    body.state-animation #style-select,
+    body.state-examine   #style-select { display: none; }
     #click-result {
       position: absolute; bottom: 58px; left: 50%;
       transform: translateX(-50%);
@@ -155,17 +160,16 @@
 
   <!-- Loading + Animation -->
   <div id="banner-anim">
-    <div id="banner-intro">
-      <div id="anim-title">Great Circles of the Earth</div>
-      <div id="anim-desc">[Intro text coming soon] — click anywhere to start exploring</div>
-    </div>
-    <div id="banner-stats-anim">
-      <div id="anim-status">Loading…</div>
-      <div id="anim-pct"></div>
-      <div id="anim-transitions"></div>
-      <div id="anim-segments"></div>
-      <div id="anim-hint">Click anywhere to explore →</div>
-    </div>
+    <div id="anim-title">Great Circles of the Earth</div>
+    <div id="anim-hint">Click anywhere to explore →</div>
+  </div>
+
+  <!-- Examine -->
+  <div id="banner-examine">
+    <span id="exam-pct"></span>
+    <span class="exp-stat" id="exam-transitions"></span>
+    <span class="exp-stat" id="exam-segments"></span>
+    <button id="try-btn">Try your own great circle</button>
   </div>
 
   <!-- Explorer -->
@@ -174,7 +178,7 @@
     <span id="exp-pct"></span>
     <span class="exp-stat" id="exp-transitions"></span>
     <span class="exp-stat" id="exp-segments"></span>
-    <button id="reveal-btn" disabled>Reveal</button>
+    <button id="reveal-btn" disabled>Reveal Wettest &amp; Driest</button>
   </div>
 
   <!-- Revealed / Detailed -->
@@ -191,29 +195,30 @@
         <span class="rev-pct" id="rev-dry-pct" style="color:#ff1744">–</span>
       </div>
     </div>
-    <button id="details-btn" class="desktop-only">Details</button>
-  </div>
-
-  <!-- Details (desktop only) -->
-  <div id="banner-details">
-    <div id="toggles"></div>
-    <div id="heatmaps">
-      <div class="hm-block">
-        <div class="hm-label" id="hm-0-label"></div>
-        <canvas class="heatmap" id="hm-0" width="160" height="160"></canvas>
-        <div class="hm-pct" id="hm-0-pct"></div>
-      </div>
-      <div class="hm-block">
-        <div class="hm-label" id="hm-1-label"></div>
-        <canvas class="heatmap" id="hm-1" width="160" height="160"></canvas>
-        <div class="hm-pct" id="hm-1-pct"></div>
-      </div>
-    </div>
+    <button id="details-btn">Details</button>
   </div>
 
 </div><!-- /banner -->
 
 <div id="map"></div>
+
+<!-- Details panel (desktop only, floats over map) -->
+<div id="details-panel">
+  <div id="toggles"></div>
+  <div id="heatmaps">
+    <div class="hm-block">
+      <div class="hm-label" id="hm-0-label"></div>
+      <canvas class="heatmap" id="hm-0" width="160" height="160"></canvas>
+      <div class="hm-pct" id="hm-0-pct"></div>
+    </div>
+    <div class="hm-block">
+      <div class="hm-label" id="hm-1-label"></div>
+      <canvas class="heatmap" id="hm-1" width="160" height="160"></canvas>
+      <div class="hm-pct" id="hm-1-pct"></div>
+    </div>
+  </div>
+</div>
+
 <select id="style-select"></select>
 <div id="click-result"></div>
 
@@ -227,7 +232,7 @@ const MASK_NLAT = 10800, MASK_NLON = 21600;
 const DISPLAY_PTS = 1080;
 const TRANSITION_PTS = 21600;
 const COARSE_TRANSITION_PTS = 3600;
-const MAX_ANIM_CIRCLES = 20;
+const MAX_ANIM_CIRCLES = 30;
 
 const COLOR_OCEAN     = '#00bcd4';  // explorer/anim ocean segments
 const COLOR_LAND      = '#e53935';  // explorer/anim land segments
@@ -245,7 +250,7 @@ let styleReady = false, dataReady = false;
 let DATA, LAYERS, BEST_FRACS, FINE_GRIDS;
 let detailsData = null;
 let coarseSegmentsBuilt = false, heatmapsInited = false, togglesBuilt = false;
-const coarseShow = { 'wet-coarse': false, 'dry-coarse': false };
+const coarseShow = { 'wet-coarse': true, 'dry-coarse': true };
 
 // Explorer
 let explorerPoints = [null, null], explorerMarkers = [null, null], explorerClickCount = 0;
@@ -253,6 +258,7 @@ const undoStack = [];
 
 // Animation
 let animRAF = null, animInterval = null, animCircleCount = 0, animFeatures = [];
+let lastAnimPct = '', lastAnimTransitions = '', lastAnimSegments = '';
 
 const isMobile  = () => window.matchMedia('(max-width:640px)').matches;
 const emptyFC   = () => ({ type: 'FeatureCollection', features: [] });
@@ -267,28 +273,40 @@ function enterState(s) {
 }
 
 function onStateExit(s) {
-  if (s === 'animation') { stopSpinning(); stopAnimInterval(); clearAnimLines(); }
+  if (s === 'animation') { stopSpinning(); stopAnimInterval(); } // lines kept for examine
+  if (s === 'examine')   { clearAnimLines(); }
   if (s === 'explorer')  { clearExplorer(); }
 }
 
 function onStateEnter(s) {
   document.getElementById('banner-anim').style.display     = (s==='loading'||s==='animation') ? 'flex' : 'none';
+  document.getElementById('banner-examine').style.display  = s==='examine'   ? 'flex' : 'none';
   document.getElementById('banner-explorer').style.display = s==='explorer'  ? 'flex' : 'none';
   document.getElementById('banner-revealed').style.display = (s==='revealed'||s==='detailed') ? 'flex' : 'none';
-  document.getElementById('banner-details').style.display  = (s==='detailed' && !isMobile()) ? 'flex' : 'none';
+  // #details-panel visibility is driven by CSS body.state-detailed selector
 
   if (s === 'animation') {
     // Snap to equator-centred, correctly-sized globe before spinning
     map.jumpTo({ center:[0,0], zoom:animZoom(), pitch:0, bearing:0 });
     startSpinning(); startAnimInterval();
   }
+  if (s === 'examine') {
+    document.getElementById('exam-pct').textContent         = lastAnimPct;
+    document.getElementById('exam-transitions').textContent = lastAnimTransitions;
+    document.getElementById('exam-segments').innerHTML      = lastAnimSegments;
+    map.getCanvas().style.cursor = '';
+  }
   if (s === 'explorer')  { setExpStatus('Click two points'); map.getCanvas().style.cursor = 'crosshair'; }
-  if (s === 'revealed' || s === 'detailed') showRevealedCircles();
+  if (s === 'revealed') {
+    map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:1800 });
+    showRevealedCircles();
+  }
+  if (s === 'detailed') showRevealedCircles();
   if (s === 'detailed' && !isMobile()) loadAndApplyDetails();
 }
 
 function reapplyCurrentState() {
-  if (appState === 'animation' && map.getSource('anim-lines') && animFeatures.length)
+  if ((appState === 'animation' || appState === 'examine') && map.getSource('anim-lines') && animFeatures.length)
     map.getSource('anim-lines').setData({ type:'FeatureCollection', features: animFeatures });
   if (appState === 'explorer' && explorerPoints[0] && explorerPoints[1]) computeAndDraw();
   if (appState === 'revealed' || appState === 'detailed') {
@@ -308,7 +326,7 @@ async function loadMask() {
     if (appState === 'loading') { enterState('animation'); }
     else if ((appState === 'revealed' || appState === 'detailed') && styleReady && dataReady) refreshFineSegments();
     updateGrid();
-  } catch(e) { document.getElementById('anim-status').textContent = 'Mask failed: ' + e.message; }
+  } catch(e) { console.error('Mask failed:', e); }
 }
 
 function isLand(lat, lon) {
@@ -531,12 +549,10 @@ function addAnimCircle() {
   const oceanFrac=(1-landCount/allPts.length)*100;
   const transitions=countTransitions(allPts);
   const stats=computeSegmentStats(allPts);
-  document.getElementById('anim-status').textContent='';
-  document.getElementById('anim-pct').textContent=oceanFrac.toFixed(1)+'% ocean';
-  document.getElementById('anim-transitions').textContent=transitions+' transitions';
-  document.getElementById('anim-segments').innerHTML=
-    `<span style="color:${COLOR_OCEAN}">▬</span> ${fmtKm(stats.longestOcean)}`+
-    `&ensp;<span style="color:${COLOR_LAND}">▬</span> ${fmtKm(stats.longestLand)}`;
+  lastAnimPct         = oceanFrac.toFixed(1)+'% ocean';
+  lastAnimTransitions = transitions+' transitions';
+  lastAnimSegments    = `<span style="color:${COLOR_OCEAN}">▬</span> ${fmtKm(stats.longestOcean)}`+
+                        `&ensp;<span style="color:${COLOR_LAND}">▬</span> ${fmtKm(stats.longestLand)}`;
   const step=Math.max(1,Math.round(TRANSITION_PTS/DISPLAY_PTS));
   animFeatures.push(...buildExplorerSegments(allPts,step));
   animCircleCount++;
@@ -544,7 +560,7 @@ function addAnimCircle() {
     map.getSource('anim-lines').setData({type:'FeatureCollection',features:animFeatures});
   if (animCircleCount>=MAX_ANIM_CIRCLES) stopAnimInterval();
 }
-function startAnimInterval() { addAnimCircle(); animInterval=setInterval(()=>{if(appState==='animation')addAnimCircle();},1000); }
+function startAnimInterval() { addAnimCircle(); animInterval=setInterval(()=>{if(appState==='animation')addAnimCircle();},750); }
 function stopAnimInterval()  { if(animInterval){clearInterval(animInterval);animInterval=null;} }
 function clearAnimLines()    { animFeatures=[];animCircleCount=0; if(map.getSource('anim-lines'))map.getSource('anim-lines').setData(emptyFC()); }
 
@@ -806,7 +822,7 @@ function buildToggles() {
   [{concept:'wet-coarse',label:'Wettest 10 (coarse)',color:'#1565c0'},
    {concept:'dry-coarse',label:'Driest 10 (coarse)', color:'#7f0000'}].forEach(({concept,label,color})=>{
     const div=document.createElement('div'); div.className='tog-row';
-    const chk=document.createElement('input'); chk.type='checkbox';
+    const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=true;
     const sw=document.createElement('div'); sw.className='tog-swatch'; sw.style.background=color;
     const lbl=document.createElement('label'); lbl.textContent=label;
     chk.addEventListener('change',ev=>{coarseShow[concept]=ev.target.checked; applyCoarseVisibility();});
@@ -869,7 +885,7 @@ function setupAllLayers() {
 
   // animation circles
   map.addSource('anim-lines',{type:'geojson',data:emptyFC()});
-  map.addLayer({id:'anim-lines',type:'line',source:'anim-lines',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':['get','color'],'line-width':1.2,'line-opacity':0.7}});
+  map.addLayer({id:'anim-lines',type:'line',source:'anim-lines',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':['get','color'],'line-width':2.5,'line-opacity':0.7}});
 
   // explorer: main + highlight
   map.addSource('gc-line',{type:'geojson',data:emptyFC()});
@@ -962,12 +978,33 @@ function animZoom() {
   return Math.log2(0.8 * Math.min(w, h) * Math.PI / 512);
 }
 
+class NorthUpControl {
+  onAdd(m) {
+    this._map = m;
+    this._btn = document.createElement('button');
+    this._btn.className = 'mapboxgl-ctrl-icon mapboxgl-ctrl-compass';
+    this._btn.type = 'button';
+    this._btn.title = 'Reset bearing to north';
+    this._btn.style.cssText = 'display:flex;align-items:center;justify-content:center;';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 29 29');
+    svg.innerHTML = '<path d="M10.5 14l4-8 4 8h-8z" fill="rgba(0,0,0,0.7)"/><path d="M10.5 16l4 8 4-8h-8z" fill="#ccc"/>';
+    this._btn.appendChild(svg);
+    this._btn.addEventListener('click',()=>{ m.easeTo({bearing:0,duration:300}); });
+    this._container = document.createElement('div');
+    this._container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
+    this._container.appendChild(this._btn);
+    return this._container;
+  }
+  onRemove() { this._container.parentNode.removeChild(this._container); this._map = undefined; }
+}
+
 const map=new mapboxgl.Map({
   container:'map', style:STYLES[0].url, projection:'globe',
   center:[0,0], zoom:animZoom(), pitch:0, bearing:0, attributionControl:false,
 });
 map.addControl(new mapboxgl.AttributionControl({compact:true}),'bottom-right');
-map.addControl(new mapboxgl.NavigationControl(),'top-left');
+map.addControl(new NorthUpControl(),'top-left');
 map.addControl(new mapboxgl.ScaleControl({maxWidth:160,unit:'metric'}),'bottom-right');
 
 map.on('style.load',()=>{ styleReady=true; setupAllLayers(); });
@@ -980,7 +1017,8 @@ map.once('load',()=>{
 
   map.on('click',e=>{
     if (appState==='loading') return;
-    if (appState==='animation') { enterState('explorer'); return; }
+    if (appState==='animation') { enterState('examine'); return; }
+    if (appState==='examine')   return; // pan/zoom only
     if (appState==='explorer') {
       if (e.originalEvent._handled) return;
       handleExpClick(e); return;
@@ -1047,6 +1085,7 @@ function clearPerturbed() {
 }
 
 // ── Button handlers ───────────────────────────────────────────────────────────
+document.getElementById('try-btn').addEventListener('click',()=>{ if(appState==='examine') enterState('explorer'); });
 document.getElementById('reveal-btn').addEventListener('click',()=>{ if(appState==='explorer') enterState('revealed'); });
 document.getElementById('details-btn').addEventListener('click',()=>{
   if (appState==='revealed') { enterState('detailed'); document.getElementById('details-btn').textContent='Close'; }
