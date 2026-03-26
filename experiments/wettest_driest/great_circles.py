@@ -450,8 +450,6 @@ def sanity_check(mask: np.ndarray, grid: dict):
 def main():
     parser = argparse.ArgumentParser(description="Find wettest/driest great circles.")
     parser.add_argument("data", help="Path to ETOPO1/GEBCO NetCDF file")
-    parser.add_argument("--lakes-mask", metavar="PATH",
-                        help="Path to lakes mask .npy (adds oceans+lakes results)")
     parser.add_argument("--grid", type=int, default=180,
                         help="Grid size N (NxN search, default 180)")
     parser.add_argument("--pts", type=int, default=3600,
@@ -467,26 +465,12 @@ def main():
     args = parser.parse_args()
 
     if args.output is None:
-        args.output = "wettest-driest-including-lakes.json" if args.lakes_mask else "wettest-driest.json"
+        args.output = "wettest-driest.json"
 
     mask, grid = load_water_mask(args.data)
 
-    if args.lakes_mask:
-        print(f"Loading lakes mask from {args.lakes_mask} ...")
-        lakes = np.load(args.lakes_mask, mmap_mode='r')
-        if lakes.shape != mask.shape:
-            raise ValueError(f"Lakes mask shape {lakes.shape} != GEBCO mask shape {mask.shape}")
-        before = int(mask.sum())
-        mask |= lakes   # in-place OR reads mmap in chunks — peak RAM stays low
-        del lakes       # release mmap
-        added = int(mask.sum()) - before
-        print(f"  Combined water fraction: {mask.mean():.3f}  "
-              f"(lake-only cells added: {added:,})")
-        wet_key = "wettest-lakes"
-        dry_key = "driest-lakes"
-    else:
-        wet_key = "wettest"
-        dry_key = "driest"
+    wet_key = "wettest"
+    dry_key = "driest"
 
     sanity_check(mask, grid)
 

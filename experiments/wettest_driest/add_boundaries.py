@@ -5,9 +5,7 @@ Streams the elevation file in horizontal strips to avoid loading it fully into R
 Computes boundaries for the best coarse result and the best fine result only.
 
 Usage:
-    python3 add_boundaries.py data/GEBCO/GEBCO_2025_sub_ice.nc
-    python3 add_boundaries.py data/GEBCO/GEBCO_2025_sub_ice.nc --lakes-mask data/lakes_mask.npy
-    python3 add_boundaries.py data/ETOPO_2022_v1_60s_N90W180_surface.nc --results etopo.json --lakes-mask data/etopo_lakes_mask.npy
+    python3 add_boundaries.py data/ETOPO_2022_v1_60s_N90W180_surface.nc
 """
 
 import argparse
@@ -19,18 +17,11 @@ import numpy as np
 from great_circles import normal_to_cartesian, great_circle_points
 
 
-def water_land_boundaries_chunked(theta, phi, nc_path, lakes_path=None,
-                                   n_pts=86400, strip_rows=500,
-                                   suppress_lakes=False):
+def water_land_boundaries_chunked(theta, phi, nc_path,
+                                   n_pts=86400, strip_rows=500):
     """
     Compute land/water boundary crossings without loading the full mask into RAM.
     Streams the elevation file in horizontal strips (~40 MB each at default settings).
-
-    lakes_path + suppress_lakes=True  → treat lake polygons as land (removes
-      spurious transitions from Great-Lakes-style sub-sea-level lake beds).
-    lakes_path + suppress_lakes=False → treat lake polygons as water (adds
-      freshwater lakes to the water mask).
-
     Returns [[lon, lat, to_water, bearing_to_land], ...].
     """
     n_vec = normal_to_cartesian(theta, phi)
@@ -80,9 +71,8 @@ def water_land_boundaries_chunked(theta, phi, nc_path, lakes_path=None,
     row_i = np.clip(np.round((lat - lat_min) / dlat_abs), 0, nlat - 1).astype(np.int32)
     col_i = np.round((lon_norm - lon0) / abs(dlon)).astype(np.int32) % nlon
 
-    lakes_mmap = np.load(lakes_path, mmap_mode='r') if lakes_path else None
-    elev_nc    = ds.variables[elev_var]
-    vals       = np.empty(n_pts, dtype=np.int8)
+    elev_nc = ds.variables[elev_var]
+    vals    = np.empty(n_pts, dtype=np.int8)
 
     for s0 in range(0, nlat, strip_rows):
         s1       = min(s0 + strip_rows, nlat)
@@ -91,37 +81,17 @@ def water_land_boundaries_chunked(theta, phi, nc_path, lakes_path=None,
             continue
 
         if gmt_format:
-            # GMT z is a flat array stored top-to-bottom; ascending strip [s0,s1)
-            # maps to file rows [nlat-s1, nlat-s0), reversed
             fs, fe = nlat - s1, nlat - s0
-            raw = elev_nc[fs * nlon : fe * nlon].reshape(s1 - s0, nlon)[::-1]
+            raw   = elev_nc[fs * nlon : fe * nlon].reshape(s1 - s0, nlon)[::-1]
             strip = (raw <= 0).astype(np.int8)
-            if lakes_mmap is not None:
-                lk = lakes_mmap[s0:s1, :].astype(np.int8)
-                if suppress_lakes:
-                    strip &= ~lk
-                else:
-                    strip |= lk
         elif ascending:
             strip = (elev_nc[s0:s1, :] <= 0).astype(np.int8)
-            if lakes_mmap is not None:
-                lk = lakes_mmap[s0:s1, :].astype(np.int8)
-                if suppress_lakes:
-                    strip &= ~lk
-                else:
-                    strip |= lk
         else:
             fs, fe = nlat - s1, nlat - s0
-            strip = (elev_nc[fs:fe, :] <= 0).astype(np.int8)[::-1]
-            if lakes_mmap is not None:
-                lk = lakes_mmap[fs:fe, :].astype(np.int8)[::-1]
-                if suppress_lakes:
-                    strip &= ~lk
-                else:
-                    strip |= lk
+            strip  = (elev_nc[fs:fe, :] <= 0).astype(np.int8)[::-1]
 
-        idx          = np.where(in_strip)[0]
-        vals[idx]    = strip[row_i[idx] - s0, col_i[idx]]
+        idx       = np.where(in_strip)[0]
+        vals[idx] = strip[row_i[idx] - s0, col_i[idx]]
 
     ds.close()
 
@@ -150,35 +120,24 @@ def water_land_boundaries_chunked(theta, phi, nc_path, lakes_path=None,
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('data', help='Path to GEBCO/ETOPO1 NetCDF file')
-    parser.add_argument('--lakes-mask', metavar='PATH')
     parser.add_argument('--pts', type=int, default=86400,
                         help='Sample points per circle (default 86400)')
     parser.add_argument('--strip-rows', type=int, default=500,
                         help='GEBCO rows per strip (default 500, ~40 MB each)')
-    parser.add_argument('--results', default='gebco.json')
+    parser.add_argument('--results', default='etopo.json')
     args = parser.parse_args()
 
     with open(args.results) as f:
         results = json.load(f)
 
     for key, exp in results.items():
-        needs_lakes = key.endswith('-lakes')
-        if needs_lakes and args.lakes_mask is None:
-            print(f'Skipping {key} — no --lakes-mask provided')
-            continue
-        # For non-lakes experiments with a mask available: suppress sub-sea-level
-        # lake beds (e.g. Great Lakes) that GEBCO would otherwise classify as water.
-        suppress = (not needs_lakes) and (args.lakes_mask is not None)
-        lakes_path = args.lakes_mask  # None if not provided
-
         coarse = exp['coarse']
         coarse_boundaries = []
         for rank, (theta_deg, phi_deg, _) in enumerate(coarse):
             print(f'\n{key}: coarse #{rank+1} ({theta_deg:.3f}°, {phi_deg:.3f}°) ...', flush=True)
             pts = water_land_boundaries_chunked(
                 np.radians(theta_deg), np.radians(phi_deg),
-                args.data, lakes_path, args.pts, args.strip_rows,
-                suppress_lakes=suppress)
+                args.data, args.pts, args.strip_rows)
             coarse_boundaries.append(pts)
             print(f'  {len(pts)} boundary points')
         exp['coarse_boundaries'] = coarse_boundaries
@@ -190,8 +149,7 @@ def main():
             print(f'  fine best ({t:.3f}°, {p:.3f}°) ...', flush=True)
             pts = water_land_boundaries_chunked(
                 np.radians(t), np.radians(p),
-                args.data, lakes_path, args.pts, args.strip_rows,
-                suppress_lakes=suppress)
+                args.data, args.pts, args.strip_rows)
             best['boundaries'] = pts
             print(f'  {len(pts)} boundary points')
 

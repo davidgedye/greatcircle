@@ -6,16 +6,11 @@ Output layout (south-to-north, west-to-east):
   col 0 = -180°W, col 21599 ≈ 180°E
   bit = 1 → land, 0 → ocean
 
-HydroLAKES mask applied in suppress mode: sub-sea-level lake beds
-(e.g. Great Lakes, Lake Baikal) are treated as land, not ocean.
-
 Unpacked: ~29 MB.  Gzipped: ~6 MB.
 
 Usage:
     cd experiments/wettest_driest
-    python3 make_binary_mask.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc \\
-        --lakes-mask ../../data/etopo_lakes_mask.npy \\
-        --output ../../explorer/mask_60s.bin.gz
+    python3 make_binary_mask.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc
 """
 
 import argparse
@@ -34,8 +29,6 @@ DEFAULT_OUT = os.path.normpath(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('etopo', help='Path to ETOPO 2022 NetCDF')
-    parser.add_argument('--lakes-mask', metavar='PATH',
-                        help='etopo_lakes_mask.npy — suppresses sub-sea-level lake beds')
     parser.add_argument('--output', default=DEFAULT_OUT)
     args = parser.parse_args()
 
@@ -73,15 +66,7 @@ def main():
             land = land[::-1].copy()
 
     print(f'  Grid: {nlat} rows × {nlon} cols')
-    print(f'  Pre-suppress land: {land.sum():,} / {nlat * nlon:,}  ({land.mean() * 100:.2f}%)')
-
-    if args.lakes_mask:
-        print(f'  Applying lakes mask {args.lakes_mask} ...')
-        lakes = np.load(args.lakes_mask, mmap_mode='r')  # ascending, row 0 = south
-        land |= lakes.astype(bool)   # lake beds → land (suppress spurious water)
-        print(f'  Lake cells suppressed: {int(lakes.sum()):,}')
-
-    print(f'  Final land cells: {int(land.sum()):,}  ({land.mean() * 100:.2f}%)')
+    print(f'  Land cells: {land.sum():,} / {nlat * nlon:,}  ({land.mean() * 100:.2f}%)')
 
     packed = np.packbits(land)   # MSB first; ~29 MB
 

@@ -12,14 +12,10 @@ import numpy as np
 # Metadata for each experiment key: display label, whether to invert (show as % land),
 # and default colours for coarse layers.  Extend when new experiments are added.
 EXPERIMENT_META = {
-    "wettest":       dict(label="Wettest (oceans only)",    invert=False,
-                          color_fine="#00e5ff", color_best="#29b6f6", color_coarse="#1565c0"),
-    "driest":        dict(label="Driest (oceans only)",     invert=True,
-                          color_fine="#ff1744", color_best="#ff6d00", color_coarse="#7f0000"),
-    "wettest-lakes": dict(label="Wettest (oceans & lakes)", invert=False,
-                          color_fine="#00e5ff", color_best="#29b6f6", color_coarse="#1565c0"),
-    "driest-lakes":  dict(label="Driest (oceans & lakes)",  invert=True,
-                          color_fine="#ff1744", color_best="#ff6d00", color_coarse="#7f0000"),
+    "wettest": dict(label="Wettest", invert=False,
+                    color_fine="#00e5ff", color_best="#29b6f6", color_coarse="#1565c0"),
+    "driest":  dict(label="Driest",  invert=True,
+                    color_fine="#ff1744", color_best="#ff6d00", color_coarse="#7f0000"),
 }
 
 zoom_fine   = ['interpolate', ['exponential', 2], ['zoom'], 0, 4,   5, 4,   10, 130]
@@ -29,7 +25,7 @@ zoom_others = ['interpolate', ['exponential', 2], ['zoom'], 0, 1,   5, 1,   10, 
 
 # ---------- Load results ----------
 
-def load_results(path='gebco.json'):
+def load_results(path='etopo.json'):
     import os, sys
     if not os.path.exists(path):
         print(f'ERROR: {path} not found — run great_circles.py first.')
@@ -158,7 +154,7 @@ def _write_json(payload, path):
     print(f'Written to {path} ({len(s) // 1024} KB)')
 
 
-def write_visuals_json(layers, best_fracs, output='gebco_visuals.json'):
+def write_visuals_json(layers, best_fracs, output='etopo_visuals.json'):
     _write_json({
         'layers':     {l['id']: l['geojson'] for l in layers},
         'layer_meta': [{k: v for k, v in l.items() if k != 'geojson'} for l in layers],
@@ -166,7 +162,7 @@ def write_visuals_json(layers, best_fracs, output='gebco_visuals.json'):
     }, output)
 
 
-def write_details_json(fine_grids, boundaries, fine_boundaries, output='gebco_details.json'):
+def write_details_json(fine_grids, boundaries, fine_boundaries, output='etopo_details.json'):
     _write_json({
         'fine_grids':      fine_grids,
         'boundaries':      boundaries,
@@ -177,9 +173,9 @@ def write_details_json(fine_grids, boundaries, fine_boundaries, output='gebco_de
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument('--input',          default='gebco.json')
-    ap.add_argument('--output',         default='gebco_visuals.json')
-    ap.add_argument('--details-output', default='gebco_details.json')
+    ap.add_argument('--input',          default='etopo.json')
+    ap.add_argument('--output',         default='etopo_visuals.json')
+    ap.add_argument('--details-output', default='etopo_details.json')
     args = ap.parse_args()
     results = load_results(args.input)
 

@@ -59,15 +59,6 @@
   .row-lbl { font-size: 11px; color: #bbb; }
   .row-pct { font-size: 13px; font-weight: bold; }
 
-  /* ── Lakes checkbox ── */
-  #lakes-toggle {
-    display: flex; align-items: center; gap: 6px;
-    padding: 7px 0 2px; font-size: 11px; color: #888;
-    cursor: pointer; border-top: 1px solid #1e1e1e; margin-top: 2px;
-  }
-  #lakes-toggle input { cursor: pointer; margin: 0; accent-color: #aaa; }
-  #lakes-toggle:hover { color: #ccc; }
-
   /* ── Collapsible Details section ── */
   .section-hdr {
     display: flex; justify-content: space-between; align-items: center;
@@ -104,29 +95,6 @@
     image-rendering: pixelated;
     border: 1px solid #333; border-radius: 2px; cursor: crosshair;
   }
-
-  /* ── Dataset switcher ── */
-  #dataset-switcher {
-    display: flex; gap: 6px; padding: 8px 0 6px; border-bottom: 1px solid #2a2a2a; margin-bottom: 4px;
-  }
-  #dataset-switcher button {
-    position: relative; flex: 1; background: #1a1a1a; color: #666; border: 1px solid #2a2a2a;
-    border-radius: 4px; padding: 4px 0; font-size: 10px; letter-spacing: 1px;
-    font-family: inherit; cursor: pointer; transition: color 0.15s, border-color 0.15s;
-  }
-  #dataset-switcher button.active { color: #ccc; border-color: #555; }
-  #dataset-switcher button:hover:not(.active) { color: #aaa; }
-  #dataset-switcher button::after {
-    content: attr(data-tooltip);
-    position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
-    background: rgba(0,0,0,0.92); border: 1px solid #444; color: #ccc;
-    font-size: 10px; letter-spacing: 0; line-height: 1.5; font-weight: normal;
-    padding: 6px 9px; border-radius: 4px; pointer-events: none;
-    opacity: 0; transition: opacity 0.15s; width: max-content; max-width: 220px;
-    white-space: normal; text-align: left; z-index: 1000;
-  }
-  #dataset-switcher button:hover::after { opacity: 1; }
-  #dataset-switcher button:last-child::after { left: auto; right: 0; transform: none; }
 
   /* ── Style switcher ── */
   #style-switcher { display: flex; align-items: center; }
@@ -243,10 +211,6 @@
       <span>DETAILS</span><span class="sec-chevron">▸</span>
     </div>
     <div class="section-body" id="details-body">
-      <div id="dataset-switcher"></div>
-      <label id="lakes-toggle">
-        <input type="checkbox" id="lakes-chk"> Include lakes
-      </label>
       <div id="toggles"></div>
       <div id="heatmaps">
         <div class="hm-pair">
@@ -281,23 +245,17 @@
 <script>
 let DATA, LAYERS, BEST_FRACS, FINE_GRIDS, BOUNDARIES, FINE_BOUNDARIES;
 
-// ── Datasets ──────────────────────────────────────────────────────────────────
-const DATASETS = [
-  { label: 'ETOPO 2022', url: 'experiments/wettest_driest/etopo_visuals.json', detailsUrl: 'experiments/wettest_driest/etopo_details.json', hasLakes: false,
-    tooltip: 'ETOPO 2022\nNOAA global relief model\nIce-surface topography · 1 arc-minute (~1.85 km)' },
-  { label: 'GEBCO 2025', url: 'experiments/wettest_driest/gebco_visuals.json',  detailsUrl: 'experiments/wettest_driest/gebco_details.json', hasLakes: true,
-    tooltip: 'GEBCO 2025\nGeneral Bathymetric Chart of the Oceans\nSub-ice bed topography · 15 arc-second (~450 m)' },
-];
-let activeDataset = 0;
+// ── Dataset ───────────────────────────────────────────────────────────────────
+const VISUALS_URL = 'experiments/wettest_driest/etopo_visuals.json';
+const DETAILS_URL = 'experiments/wettest_driest/etopo_details.json';
 
 // ── State ────────────────────────────────────────────────────────────────────
 const COLORS = ['#00e5ff', '#ff1744'];   // [wet=cyan, dry=red]
-let includeLakes = false;
 
-const INVERT = { wettest: false, driest: true, 'wettest-lakes': false, 'driest-lakes': true };
+const INVERT = { wettest: false, driest: true };
 
-function WET()    { return includeLakes ? 'wettest-lakes' : 'wettest'; }
-function DRY()    { return includeLakes ? 'driest-lakes'  : 'driest';  }
+function WET()    { return 'wettest'; }
+function DRY()    { return 'driest'; }
 function ACTIVE() { return [WET(), DRY()]; }
 
 function expFmt(key, frac) {
@@ -418,30 +376,6 @@ function renderSummaryRows() {
   if (!BEST_FRACS) return;
   document.getElementById('wet-pct').textContent = expFmt(WET(), BEST_FRACS[WET()]);
   document.getElementById('dry-pct').textContent = expFmt(DRY(), BEST_FRACS[DRY()]);
-}
-
-// ── Lakes toggle ──────────────────────────────────────────────────────────────
-function setIncludeLakes(val) {
-  includeLakes = val;
-  renderSummaryRows();
-  if (FINE_GRIDS) renderHeatmaps();
-  clearPerturbed();
-  if (styleReady) {
-    renderActiveLayers();
-    renderPoleMarkers();
-    applyCoarseVisibility();
-    ['wet', 'dry'].forEach((side, si) => {
-      const key = ACTIVE()[si];
-      if (BOUNDARIES) {
-        const src = map.getSource(`boundaries-${side}`);
-        if (src) src.setData(BOUNDARIES[key] || _emptyFC);
-      }
-      if (FINE_BOUNDARIES) {
-        const src = map.getSource(`fine-boundaries-${side}`);
-        if (src) src.setData(FINE_BOUNDARIES[key] || _emptyFC);
-      }
-    });
-  }
 }
 
 // ── Swatch helper ─────────────────────────────────────────────────────────────
@@ -896,7 +830,7 @@ let styleReady = false, dataReady = false;
 
 map.on('zoomend', () => {
   if (!styleReady || !dataReady) return;
-  if (map.getZoom() >= ARROW_ZOOM_THRESHOLD && !detailsCache[activeDataset]) {
+  if (map.getZoom() >= ARROW_ZOOM_THRESHOLD && !detailsData) {
     loadAndApplyDetails();
   } else {
     updateBoundaryVisibility();
@@ -935,7 +869,7 @@ function applyDataset(d) {
   regenCircleCoords(DATA);
 }
 
-const detailsCache = {};
+let detailsData = null;
 
 function applyDetails(d) {
   FINE_GRIDS      = d.fine_grids      || null;
@@ -943,15 +877,13 @@ function applyDetails(d) {
   FINE_BOUNDARIES = d.fine_boundaries || null;
 }
 
-function ensureDetails(idx) {
-  if (detailsCache[idx]) return Promise.resolve(detailsCache[idx]);
-  return fetch(DATASETS[idx].detailsUrl)
-    .then(r => r.json())
-    .then(d => { detailsCache[idx] = d; return d; });
+function ensureDetails() {
+  if (detailsData) return Promise.resolve(detailsData);
+  return fetch(DETAILS_URL).then(r => r.json()).then(d => { detailsData = d; return d; });
 }
 
 function loadAndApplyDetails() {
-  ensureDetails(activeDataset).then(d => {
+  ensureDetails().then(d => {
     applyDetails(d);
     const empty = { type: 'FeatureCollection', features: [] };
     ['wet', 'dry'].forEach((side, si) => {
@@ -967,81 +899,15 @@ function loadAndApplyDetails() {
   });
 }
 
-function switchDataset(idx) {
-  if (idx === activeDataset) return;
-  activeDataset = idx;
-  const ds = DATASETS[idx];
-
-  // Update button states
-  document.querySelectorAll('#dataset-switcher button').forEach((btn, i) => {
-    btn.classList.toggle('active', i === idx);
-  });
-
-  // Lakes toggle: hide if dataset has no lakes data; restore checkbox state when showing
-  const lakesToggle = document.getElementById('lakes-toggle');
-  lakesToggle.style.display = ds.hasLakes ? '' : 'none';
-  if (!ds.hasLakes && includeLakes) setIncludeLakes(false);
-  if (ds.hasLakes) document.getElementById('lakes-chk').checked = includeLakes;
-
-  fetch(ds.url).then(r => r.json()).then(d => {
-    applyDataset(d);
-
-    // Update or add all great-circle line sources/layers
-    LAYERS.forEach(l => {
-      if (map.getSource(l.id)) {
-        map.getSource(l.id).setData(DATA[l.id]);
-      } else {
-        // Layer didn't exist in previous dataset (e.g. lakes variants) — add it now
-        map.addSource(l.id, { type: 'geojson', data: DATA[l.id] });
-        const paint = { 'line-color': l.color, 'line-width': l.width, 'line-opacity': l.opacity };
-        if (l.dashed) paint['line-dasharray'] = [5, 4];
-        map.addLayer({
-          id: l.id, type: 'line', source: l.id, paint,
-          layout: { 'line-cap': l.dashed ? 'butt' : 'round', 'line-join': 'round', 'visibility': 'none' },
-        }, 'boundaries-wet');
-      }
-    });
-
-    // Clear boundary sources until details loads
-    const empty = { type: 'FeatureCollection', features: [] };
-    ['wet', 'dry'].forEach(side => {
-      const src  = map.getSource(`boundaries-${side}`);
-      const fsrc = map.getSource(`fine-boundaries-${side}`);
-      if (src)  src.setData(empty);
-      if (fsrc) fsrc.setData(empty);
-    });
-
-    clearPerturbed();
-    renderSummaryRows();
-    renderActiveLayers();
-    applyCoarseVisibility();
-
-    const detailsOpen = document.getElementById('details-body').classList.contains('open');
-    if (detailsOpen) loadAndApplyDetails();
-  }).catch(err => console.error('Failed to load', ds.url, err));
-}
-
-// Build dataset switcher buttons
-DATASETS.forEach((ds, i) => {
-  const btn = document.createElement('button');
-  btn.textContent = ds.label;
-  if (ds.tooltip) btn.setAttribute('data-tooltip', ds.tooltip);
-  if (i === 0) btn.classList.add('active');
-  btn.addEventListener('click', () => switchDataset(i));
-  document.getElementById('dataset-switcher').appendChild(btn);
-});
-
-fetch(DATASETS[0].url)
+fetch(VISUALS_URL)
   .then(r => r.json())
   .then(d => {
     applyDataset(d);
     dataReady = true;
     renderSummaryRows();
-    document.getElementById('lakes-chk').addEventListener('change', e => setIncludeLakes(e.target.checked));
-    document.getElementById('lakes-toggle').style.display = DATASETS[activeDataset].hasLakes ? '' : 'none';
     if (styleReady) setupMapLayers();
   })
-  .catch(err => console.error('Failed to load', DATASETS[0].url, err));
+  .catch(err => console.error('Failed to load', VISUALS_URL, err));
 </script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 # Wettest and Driest Great Circles on Earth
-A “great circle” is any full circumference of the Earth. If the center of a circle is the center of the Earth,  you have a great circle. The equator is a great circle, and so is any circle that goes through both poles, but the circle can be tilted at any angle, and cross the equator at any two opposite points.
+A "great circle" is any full circumference of the Earth. If the center of a circle is the center of the Earth,  you have a great circle. The equator is a great circle, and so is any circle that goes through both poles, but the circle can be tilted at any angle, and cross the equator at any two opposite points.
 
-This project checks all possible great circles and finds the one that maximizes the ocean coverage (the "wettest") and the one that minimizes it (the "driest"). 
+This project checks all possible great circles and finds the one that maximizes the ocean coverage (the "wettest") and the one that minimizes it (the "driest").
 
 An interactive visualisation is hosted at **https://davidgedye.github.io/greatcircle/**.
 
@@ -11,24 +11,18 @@ Chabukswar & Mukherjee (2018) found the longest *uninterrupted* great-circle pat
 
 ## Data
 
-Two elevation datasets are supported and can be switched in the visualiser. Both use elevation ≤ 0 m as the water definition.
+**ETOPO 2022** — 1 arc-minute (~1.85 km) global relief model, ice-surface elevation. Water defined as elevation ≤ 0 m.
 
-| | ETOPO 2022 (default) | GEBCO 2025 Sub-Ice |
-|---|---|---|
-| Source | NOAA | General Bathymetric Chart of the Oceans |
-| Resolution | 1 arc-minute (~1.85 km) | 15 arc-second (~450 m) |
-| Ice treatment | Ice-surface elevation | Sub-ice bed topography |
-| File | `ETOPO_2022_v1_60s_N90W180_surface.nc` | `GEBCO_2025_sub_ice.nc` |
-| Size | ~457 MB | ~3.7 GB |
-| Download | [ncei.noaa.gov](https://www.ncei.noaa.gov/products/etopo-global-relief-model) | [gebco.net](https://www.gebco.net/data_and_products/gridded_bathymetry_data/) |
+| | |
+|---|---|
+| Source | NOAA |
+| Resolution | 1 arc-minute (~1.85 km) |
+| Ice treatment | Ice-surface elevation |
+| File | `ETOPO_2022_v1_60s_N90W180_surface.nc` |
+| Size | ~457 MB |
+| Download | [ncei.noaa.gov](https://www.ncei.noaa.gov/products/etopo-global-relief-model) |
 
-The ice treatment difference matters: GEBCO classifies the sub-ice beds of Greenland and Antarctica (largely below sea level) as water, while ETOPO 2022 classifies the ice surface as land. This accounts for the ~5 percentage point difference in wettest scores between the two datasets.
-
-**HydroLAKES** — polygon dataset of lakes and reservoirs ≥ 10 ha worldwide (~1.4 M features, [hydrosheds.org](https://www.hydrosheds.org/products/hydrolakes)). Used in two ways: (1) for GEBCO, an optional "include lakes" toggle counts lake surfaces above sea level as water; (2) for both datasets, the mask is applied in *reverse* to suppress sub-sea-level lake-bed artefacts (see below).
-
-**Sub-sea-level lake beds (artefact in both datasets).** Both GEBCO and ETOPO record actual lake bed topography. Several large lakes have beds that dip below sea level — Lake Superior's bed reaches −223 m (surface 183 m), Lake Michigan's −105 m, and Lake Baikal's −1,186 m (surface 456 m, max depth 1,642 m). Because the water/land threshold is elevation ≤ 0 m, the deep central portions of these lakes are classified as water while the shallower margins are classified as land, producing spurious land/water transitions scattered across the lake interior. To suppress this artefact, `add_boundaries.py` applies the HydroLAKES mask in *reverse*: any cell that falls within a lake polygon is forced to land, removing the false transitions. For GEBCO, toggling the lakes checkbox in the visualiser switches to the fully correct treatment where the entire lake surface is counted as water.
-
-Place data files under `data/` at the repo root (not committed — too large).
+Place the data file under `data/` at the repo root (not committed — too large).
 
 ## Approach
 
@@ -45,14 +39,14 @@ The grid must be sampled **uniformly in cos(θ)**, not uniformly in θ, to give 
 
 **Stage 1 — Coarse grid** (~32,400 circles at default grid=180)
 - 180×180 grid in (cos θ, φ)
-- 86,400 sample points per circle (matches GEBCO 15 arc-second resolution); ETOPO1 uses 21,600
+- 21,600 sample points per circle (matches ETOPO 1 arc-minute resolution)
 - Nearest-neighbour lookup via `scipy.ndimage.map_coordinates`
 - Parallelised across CPU cores with `ProcessPoolExecutor`
 
 **Stage 2 — Fine zoom**
 - Top 10 coarse candidates are each refined
 - ±2° window around each seed at 0.05° step size (80×80 grid per candidate)
-- Full search surface saved to `gebco.json` / `etopo.json` for visualisation
+- Full search surface saved to `etopo.json` for visualisation
 
 ## Results
 
@@ -60,14 +54,8 @@ The grid must be sampled **uniformly in cos(θ)**, not uniformly in θ, to give 
 |---|---|---|---|
 | **ETOPO 2022** | Wettest | 24.14°N 79.58°E | **91.56% ocean** |
 | **ETOPO 2022** | Driest | 6.57°S 25.22°E | **57.69% land** |
-| **GEBCO** | Wettest | 6.31°S 63.38°E | **96.32% ocean** |
-| **GEBCO** | Driest | 12.96°N 15.28°E | **53.11% land** |
-| **GEBCO + lakes** | Wettest | 6.31°S 63.38°E | **96.32% ocean** |
-| **GEBCO + lakes** | Driest | 13.01°N 15.28°E | **51.55% land** |
 
 *Results as of 2026-03-24 (commit a29c472)*
-
-The two datasets find different wettest circles (ETOPO 2022: Indian subcontinent axis; GEBCO: Indian Ocean axis) but similar driest circles (both cross central Africa and Asia). The ~5 pp wettest score difference is explained by ice sheet treatment — see the Data section.
 
 The wettest circle tilts through the Indian Ocean, western Pacific and Arctic — almost entirely open water. The driest circle threads through central Africa, Europe, central Asia and North America, crossing the major continental land masses.
 
@@ -79,22 +67,13 @@ experiments/
   wettest_driest/
     great_circles.py                Search algorithm — writes results JSON
     add_boundaries.py               Augments results with land/water boundary points
-    make_lakes_mask.py              Rasterises HydroLAKES onto a GEBCO or ETOPO grid
     visualize.py                    Converts results JSON → web-ready JSON
-    compare_datasets.py             Cross-dataset comparison table
     Makefile                        Full pipeline
-    etopo.json                      ETOPO search results
-    gebco.json                      GEBCO search results (oceans + lakes variants)
-    etopo_visuals.json              ETOPO map data (initial load)
-    etopo_details.json              ETOPO detail data (lazy-loaded)
-    gebco_visuals.json              GEBCO map data (initial load)
-    gebco_details.json              GEBCO detail data (lazy-loaded)
+    etopo.json                      Search results (gitignored, regenerated locally)
+    etopo_visuals.json              Map data (initial load)
+    etopo_details.json              Detail data (lazy-loaded)
 data/
   ETOPO_2022_v1_60s_N90W180_surface.nc  Not in repo (~457 MB)
-  GEBCO/GEBCO_2025_sub_ice.nc       Not in repo (~3.7 GB)
-  lakes_mask.npy                    Rasterised HydroLAKES on GEBCO grid (~500 MB, generated)
-  etopo_lakes_mask.npy              Rasterised HydroLAKES on ETOPO grid (~28 MB, generated)
-  HydroLAKES_polys_v10_shp/         Not in repo
 ```
 
 ## Usage
@@ -102,24 +81,15 @@ data/
 All commands run from `experiments/wettest_driest/`.
 
 ```bash
-pip install netCDF4 scipy numpy shapely fiona
+pip install netCDF4 scipy numpy
 
 # Full pipeline (search → boundaries → web JSON)
 make
 
 # Or step by step:
-python3 great_circles.py ../../data/GEBCO/GEBCO_2025_sub_ice.nc --workers 8 --pts 86400
-python3 add_boundaries.py ../../data/GEBCO/GEBCO_2025_sub_ice.nc --lakes-mask ../../data/lakes_mask.npy
-python3 visualize.py
-
-# ETOPO
-python3 make_lakes_mask.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc ../../data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp ../../data/etopo_lakes_mask.npy
 python3 great_circles.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc --workers 8
-python3 add_boundaries.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc --results etopo.json --lakes-mask ../../data/etopo_lakes_mask.npy
-python3 visualize.py --input etopo.json --output etopo_visuals.json --details-output etopo_details.json
-
-# Cross-dataset comparison
-make compare
+python3 add_boundaries.py ../../data/ETOPO_2022_v1_60s_N90W180_surface.nc
+python3 visualize.py
 
 # Serve locally
 python3 -m http.server 8000  # from repo root
@@ -132,15 +102,12 @@ python3 -m http.server 8000  # from repo root
 |------|---------|-------------|
 | `--workers N` | 1 | Parallel worker processes |
 | `--grid N` | 180 | Coarse grid size (N×N) |
-| `--pts N` | auto | Sample points per circle (defaults to dataset native resolution) |
+| `--pts N` | 3600 | Sample points per circle |
 | `--no-fine` | off | Skip fine zoom stage |
-| `--lakes-mask PATH` | — | Include lakes above sea level |
 
 ## Visualisation
 
 The web page (`index.html`) loads map data immediately and lazily loads detail data (heatmaps, boundary arrows) only when the Details panel is opened.
-
-**Two datasets** are selectable via buttons in the Details panel. ETOPO1 loads on startup (~700 KB); GEBCO loads on demand (~1.4 MB). Hovering the buttons shows a tooltip explaining each dataset and its resolution.
 
 **Map features:**
 - Globe projection with atmosphere and fog
@@ -151,7 +118,7 @@ The web page (`index.html`) loads map data immediately and lazily loads detail d
 
 **Land/water boundary arrows** (Details panel):
 - Triangular arrows at every land/water transition along the top-10 coarse and best fine circles, pointing toward land
-- Computed at full dataset resolution (86,400 pts for GEBCO, 21,600 for ETOPO1) using chunked streaming to avoid loading the full elevation file into memory
+- Computed at full dataset resolution using chunked streaming to avoid loading the full elevation file into memory
 
 **Fine search heatmaps** (Details panel):
 - Show the optimisation landscape across the ±2° fine search window
@@ -171,7 +138,7 @@ The web page (`index.html`) loads map data immediately and lazily loads detail d
 The fine best result has an estimated positional uncertainty of ~10 km from:
 
 1. **Search grid resolution** — fine step 0.05°, results cluster within ~0.03° → ~3–5 km
-2. **Coastline accuracy** — ETOPO1 ~1.85 km cells; GEBCO ~450 m cells → ~0.5–2 km
+2. **Coastline accuracy** — ETOPO 1 arc-minute cells (~1.85 km) → ~1–2 km
 3. **Elevation threshold** — tidal flats can shift the effective coastline by 2–10 km
 
 Combined (RSS): ~7 km, rounded to 10 km for display.
