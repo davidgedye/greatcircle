@@ -8,100 +8,68 @@
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      width: 100%; height: 100%; overflow: hidden; background: #000;
-      font-family: 'Courier New', monospace;
-      display: flex; flex-direction: column;
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000;
+      font-family: 'Courier New', monospace; position: relative; }
+
+    /* ── Map fills full window ──────────────────────────────────────── */
+    #map { position: absolute; inset: 0; }
+
+    /* ── Logo panel (top-left) ──────────────────────────────────────── */
+    #logo-panel {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      line-height: 0;  /* collapse img whitespace */
     }
 
-    /* ── Banner ────────────────────────────────────────────────────── */
-    #banner {
-      flex-shrink: 0; width: 100%;
-      background: rgba(8,8,8,0.92);
-      border-bottom: 1px solid #2a2a2a;
-      overflow: hidden;
-      transition: max-height 0.4s ease;
+    /* ── Info panel (top-right floating card) ───────────────────────── */
+    #info-panel {
+      position: absolute; top: 12px; right: 12px; z-index: 10;
+      width: 210px; display: none;
+      background: rgba(8,8,8,0.88); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 14px;
       color: #ccc; font-size: 12px;
+      backdrop-filter: blur(6px);
     }
-    #banner { max-height: 56px; }
+    body.state-examine  #info-panel,
+    body.state-explorer #info-panel,
+    body.state-revealed #info-panel,
+    body.state-detailed #info-panel { display: block; }
 
-    /* ── banner-anim ───────────────────────────────────────────────── */
-    #banner-anim {
-      display: flex; align-items: center;
-      padding: 0 16px; height: 56px; gap: 12px;
-    }
-    #anim-title {
-      font-size: 11px; color: #888;
-      letter-spacing: 1px; text-transform: uppercase;
-    }
-    #anim-hint { font-size: 10px; color: #444; margin-left: auto; letter-spacing: 0.5px; }
-
-    /* ── banner-examine ────────────────────────────────────────────── */
-    #banner-examine {
-      display: none; align-items: center; gap: 12px;
-      padding: 0 16px; height: 56px; font-size: 12px;
-    }
-    #try-btn {
-      margin-left: auto; flex-shrink: 0;
-      background: rgba(255,255,255,0.07); color: #bbb;
-      border: 1px solid rgba(255,255,255,0.18); border-radius: 5px;
-      padding: 6px 16px; font-size: 10px; letter-spacing: 2px;
-      font-family: inherit; cursor: pointer; text-transform: uppercase;
-      transition: background 0.15s;
-    }
-    #try-btn:hover { background: rgba(255,255,255,0.15); }
-    @media (max-width: 640px) {
-      #banner-examine { gap: 8px; padding: 0 10px; }
+    /* Each sub-panel is flex-column; JS toggles display none/flex */
+    #panel-examine, #panel-explorer, #panel-revealed {
+      display: none; flex-direction: column; gap: 9px;
     }
 
-    /* ── banner-explorer ───────────────────────────────────────────── */
-    #banner-explorer {
-      display: none; align-items: center; gap: 12px;
-      padding: 0 16px; height: 56px; font-size: 12px;
-    }
-    #exp-status { font-size: 11px; color: #555; white-space: nowrap; }
-    #exp-pct { font-size: 16px; font-weight: bold; color: #fff; white-space: nowrap; }
-    .exp-stat { font-size: 11px; color: #888; white-space: nowrap; }
-    #reveal-btn {
-      margin-left: auto; flex-shrink: 0;
-      background: rgba(255,255,255,0.07); color: #bbb;
-      border: 1px solid rgba(255,255,255,0.18); border-radius: 5px;
-      padding: 6px 16px; font-size: 10px; letter-spacing: 2px;
-      font-family: inherit; cursor: pointer; text-transform: uppercase;
-      transition: background 0.15s;
-    }
-    #reveal-btn:hover:not(:disabled) { background: rgba(255,255,255,0.15); }
-    #reveal-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-    @media (max-width: 640px) {
-      #banner-explorer { gap: 8px; padding: 0 10px; }
-      .exp-stat { display: none; }
-    }
+    /* Shared stat elements */
+    #exp-status { font-size: 11px; color: #555; }
+    #exp-pct, #exam-pct { font-size: 16px; font-weight: bold; color: #fff; }
+    .exp-stat { font-size: 11px; color: #888; }
 
-    /* ── banner-revealed ───────────────────────────────────────────── */
-    #banner-revealed {
-      display: none; align-items: center;
-      padding: 0 16px; height: 56px; gap: 20px;
-    }
-    #rev-rows { display: flex; flex-direction: column; gap: 7px; flex: 1; }
-    .rev-row { display: flex; align-items: center; gap: 8px; }
+    /* Revealed rows */
+    #rev-rows { display: flex; flex-direction: column; gap: 7px; }
+    .rev-row  { display: flex; align-items: center; gap: 8px; }
     .rev-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; opacity: 0.9; }
     .rev-lbl { font-size: 11px; color: #888; min-width: 48px; }
     .rev-pct { font-size: 13px; font-weight: bold; }
-    #details-btn {
-      flex-shrink: 0;
+
+    /* Shared button style */
+    #try-btn, #reveal-btn, #details-btn {
       background: rgba(255,255,255,0.07); color: #bbb;
       border: 1px solid rgba(255,255,255,0.18); border-radius: 5px;
-      padding: 6px 16px; font-size: 10px; letter-spacing: 2px;
+      padding: 7px 12px; font-size: 10px; letter-spacing: 2px;
       font-family: inherit; cursor: pointer; text-transform: uppercase;
-      transition: background 0.15s;
+      transition: background 0.15s; width: 100%;
     }
-    #details-btn:hover { background: rgba(255,255,255,0.15); }
-    @media (max-width: 640px) { .desktop-only { display: none !important; } }
+    #try-btn:hover, #details-btn:hover { background: rgba(255,255,255,0.15); }
+    #reveal-btn:hover:not(:disabled) { background: rgba(255,255,255,0.15); }
+    #reveal-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    @media (max-width: 640px) {
+      #details-btn { display: none; }
+    }
 
     /* ── Details panel (desktop only, floats over map on the right) ── */
     #details-panel {
       display: none; position: absolute;
-      top: 64px; right: 16px; bottom: 16px;
+      top: 130px; right: 12px; bottom: 16px;
       width: 220px; overflow-y: auto;
       background: rgba(8,8,8,0.88); border: 1px solid #2a2a2a;
       border-radius: 8px; padding: 14px 14px 16px;
@@ -127,12 +95,13 @@
     }
 
     /* ── Navigation controls ───────────────────────────────────────── */
+    /* Push NorthUp below the logo (logo is ~108px from top of viewport) */
+    .mapboxgl-ctrl-top-left { margin-top: 108px; }
     body.state-loading   .mapboxgl-ctrl-top-left,
     body.state-animation .mapboxgl-ctrl-top-left,
     body.state-examine   .mapboxgl-ctrl-top-left { display: none !important; }
 
-    /* ── Map & overlays ────────────────────────────────────────────── */
-    #map { flex: 1; min-height: 0; }
+    /* ── Overlays ──────────────────────────────────────────────────── */
     #style-select {
       position: absolute; bottom: 32px; left: 12px;
       background: rgba(0,0,0,0.72); color: #fff;
@@ -156,33 +125,33 @@
 </head>
 <body class="state-loading">
 
-<div id="banner">
+<div id="map"></div>
 
-  <!-- Loading + Animation -->
-  <div id="banner-anim">
-    <div id="anim-title">Great Circles of the Earth</div>
-    <div id="anim-hint">Click anywhere to explore →</div>
-  </div>
+<!-- Logo (top-left) -->
+<div id="logo-panel">
+  <img src="logo.svg" alt="Great Circle Challenge" width="110">
+</div>
 
-  <!-- Examine -->
-  <div id="banner-examine">
+<!-- Info panel (top-right) -->
+<div id="info-panel">
+
+  <!-- Examine state -->
+  <div id="panel-examine">
     <span id="exam-pct"></span>
-    <span class="exp-stat" id="exam-transitions"></span>
-    <span class="exp-stat" id="exam-segments"></span>
+    <span id="exam-segments"></span>
     <button id="try-btn">Try your own great circle</button>
   </div>
 
-  <!-- Explorer -->
-  <div id="banner-explorer">
+  <!-- Explorer state -->
+  <div id="panel-explorer">
     <span id="exp-status">Click two points</span>
     <span id="exp-pct"></span>
-    <span class="exp-stat" id="exp-transitions"></span>
-    <span class="exp-stat" id="exp-segments"></span>
+    <span id="exp-segments"></span>
     <button id="reveal-btn" disabled>Reveal Wettest &amp; Driest</button>
   </div>
 
-  <!-- Revealed / Detailed -->
-  <div id="banner-revealed">
+  <!-- Revealed / Detailed state -->
+  <div id="panel-revealed">
     <div id="rev-rows">
       <div class="rev-row">
         <span class="rev-swatch" style="background:#00e5ff"></span>
@@ -198,9 +167,7 @@
     <button id="details-btn">Details</button>
   </div>
 
-</div><!-- /banner -->
-
-<div id="map"></div>
+</div><!-- /info-panel -->
 
 <!-- Details panel (desktop only, floats over map) -->
 <div id="details-panel">
@@ -232,7 +199,7 @@ const MASK_NLAT = 10800, MASK_NLON = 21600;
 const DISPLAY_PTS = 1080;
 const TRANSITION_PTS = 21600;
 const COARSE_TRANSITION_PTS = 3600;
-const MAX_ANIM_CIRCLES = 30;
+const MAX_ANIM_CIRCLES = 10;
 
 const COLOR_OCEAN     = '#00bcd4';  // explorer/anim ocean segments
 const COLOR_LAND      = '#e53935';  // explorer/anim land segments
@@ -257,7 +224,7 @@ let explorerPoints = [null, null], explorerMarkers = [null, null], explorerClick
 const undoStack = [];
 
 // Animation
-let animRAF = null, animInterval = null, animCircleCount = 0, animFeatures = [];
+let animRAF = null, animInterval = null, animCircleCount = 0, animFeatures = [], animCircleData = [];
 let lastAnimPct = '', lastAnimTransitions = '', lastAnimSegments = '';
 
 const isMobile  = () => window.matchMedia('(max-width:640px)').matches;
@@ -279,11 +246,11 @@ function onStateExit(s) {
 }
 
 function onStateEnter(s) {
-  document.getElementById('banner-anim').style.display     = (s==='loading'||s==='animation') ? 'flex' : 'none';
-  document.getElementById('banner-examine').style.display  = s==='examine'   ? 'flex' : 'none';
-  document.getElementById('banner-explorer').style.display = s==='explorer'  ? 'flex' : 'none';
-  document.getElementById('banner-revealed').style.display = (s==='revealed'||s==='detailed') ? 'flex' : 'none';
-  // #details-panel visibility is driven by CSS body.state-detailed selector
+  document.getElementById('panel-examine').style.display  = s==='examine'                    ? 'flex' : 'none';
+  document.getElementById('panel-explorer').style.display = s==='explorer'                   ? 'flex' : 'none';
+  document.getElementById('panel-revealed').style.display = (s==='revealed'||s==='detailed') ? 'flex' : 'none';
+  // #info-panel visibility driven by CSS body.state-* selector
+  // #details-panel visibility driven by CSS body.state-detailed selector
 
   if (s === 'animation') {
     // Snap to equator-centred, correctly-sized globe before spinning
@@ -291,8 +258,7 @@ function onStateEnter(s) {
     startSpinning(); startAnimInterval();
   }
   if (s === 'examine') {
-    document.getElementById('exam-pct').textContent         = lastAnimPct;
-    document.getElementById('exam-transitions').textContent = lastAnimTransitions;
+    document.getElementById('exam-pct').textContent = lastAnimPct;
     document.getElementById('exam-segments').innerHTML      = lastAnimSegments;
     map.getCanvas().style.cursor = '';
   }
@@ -444,9 +410,10 @@ function interpGrid(gd,tDeg,pDeg) {
 
 // ── Segment builders ──────────────────────────────────────────────────────────
 // Explorer/animation: input [{lat,lon},...], full cyan/red coloring
-function buildExplorerSegments(pts, displayStep) {
+function buildExplorerSegments(pts, displayStep, circleIdx) {
   if (pts.length<2) return [];
   const features=[]; let segStart=0, segLand=isLand(pts[0].lat,pts[0].lon);
+  const extra = (circleIdx != null) ? {circleIdx} : {};
   function flush(endIdx) {
     if (endIdx-segStart<1) return;
     const coords=[];
@@ -454,7 +421,7 @@ function buildExplorerSegments(pts, displayStep) {
     if (coords[coords.length-1]!==pts[endIdx]) coords.push([pts[endIdx].lon,pts[endIdx].lat]);
     const color=segLand?COLOR_LAND:COLOR_OCEAN;
     for (const seg of splitAtAntimeridian(coords))
-      features.push({type:'Feature',geometry:{type:'LineString',coordinates:seg},properties:{color}});
+      features.push({type:'Feature',geometry:{type:'LineString',coordinates:seg},properties:{color,...extra}});
   }
   for (let i=1;i<pts.length;i++) {
     const curr=isLand(pts[i].lat,pts[i].lon);
@@ -529,14 +496,16 @@ function randomNormal() {
   while (r>1||r<1e-10);
   const s=1/Math.sqrt(r); return [x*s,y*s,z*s];
 }
+let spinPaused = false;
 function startSpinning() {
   let last=null;
   function step(ts) {
-    if (last!==null) {
+    if (!spinPaused && last!==null) {
       const lon=(map.getCenter().lng + (ts-last)*9/1000) % 360;
       map.setCenter([lon, 0]);
     }
-    last=ts; animRAF=requestAnimationFrame(step);
+    if (spinPaused) last=null; else last=ts;
+    animRAF=requestAnimationFrame(step);
   }
   animRAF=requestAnimationFrame(step);
 }
@@ -544,17 +513,20 @@ function stopSpinning() { if(animRAF){cancelAnimationFrame(animRAF);animRAF=null
 
 function addAnimCircle() {
   if (!maskReady||animCircleCount>=MAX_ANIM_CIRCLES) return;
-  const allPts=sampleGC(randomNormal(),TRANSITION_PTS);
+  const normal=randomNormal();
+  const allPts=sampleGC(normal,TRANSITION_PTS);
   let landCount=0; for(const p of allPts) landCount+=isLand(p.lat,p.lon);
   const oceanFrac=(1-landCount/allPts.length)*100;
   const transitions=countTransitions(allPts);
   const stats=computeSegmentStats(allPts);
-  lastAnimPct         = oceanFrac.toFixed(1)+'% ocean';
-  lastAnimTransitions = transitions+' transitions';
+  const circleIdx = animCircleCount;
+  lastAnimPct         = fmtPct(oceanFrac);
+  lastAnimTransitions = '';
   lastAnimSegments    = `<span style="color:${COLOR_OCEAN}">▬</span> ${fmtKm(stats.longestOcean)}`+
                         `&ensp;<span style="color:${COLOR_LAND}">▬</span> ${fmtKm(stats.longestLand)}`;
+  animCircleData[circleIdx] = { pct: lastAnimPct, transitions: lastAnimTransitions, segments: lastAnimSegments, normal };
   const step=Math.max(1,Math.round(TRANSITION_PTS/DISPLAY_PTS));
-  animFeatures.push(...buildExplorerSegments(allPts,step));
+  animFeatures.push(...buildExplorerSegments(allPts,step,circleIdx));
   animCircleCount++;
   if (map.getSource('anim-lines'))
     map.getSource('anim-lines').setData({type:'FeatureCollection',features:animFeatures});
@@ -562,19 +534,25 @@ function addAnimCircle() {
 }
 function startAnimInterval() { addAnimCircle(); animInterval=setInterval(()=>{if(appState==='animation')addAnimCircle();},750); }
 function stopAnimInterval()  { if(animInterval){clearInterval(animInterval);animInterval=null;} }
-function clearAnimLines()    { animFeatures=[];animCircleCount=0; if(map.getSource('anim-lines'))map.getSource('anim-lines').setData(emptyFC()); }
+function clearAnimLines()    { animFeatures=[];animCircleCount=0;animCircleData=[]; if(map.getSource('anim-lines'))map.getSource('anim-lines').setData(emptyFC()); }
 
 // ── Explorer subsystem ────────────────────────────────────────────────────────
+// If land ≥ 50% report as land fraction, otherwise as ocean fraction.
+function fmtPct(oceanFrac) {
+  const landFrac = 100 - oceanFrac;
+  return landFrac >= 50
+    ? landFrac.toFixed(1) + '% land'
+    : oceanFrac.toFixed(1) + '% ocean';
+}
+
 function setExpStatus(msg) {
   document.getElementById('exp-status').textContent=msg;
   document.getElementById('exp-pct').textContent='';
-  document.getElementById('exp-transitions').textContent='';
   document.getElementById('exp-segments').innerHTML='';
 }
 function updateExpBanner(oceanFrac,transitions,stats) {
   document.getElementById('exp-status').textContent='';
-  document.getElementById('exp-pct').textContent=oceanFrac.toFixed(1)+'% ocean';
-  document.getElementById('exp-transitions').textContent=transitions+' transitions';
+  document.getElementById('exp-pct').textContent=fmtPct(oceanFrac);
   document.getElementById('exp-segments').innerHTML=
     `<span style="color:${COLOR_OCEAN}">▬</span> ${fmtKm(stats.longestOcean)}`+
     `&ensp;<span style="color:${COLOR_LAND}">▬</span> ${fmtKm(stats.longestLand)}`;
@@ -621,7 +599,7 @@ function drawFast() {
   const [A,B]=explorerPoints; if(!A||!B) return;
   const allPts=sampleGC(gcNormal(A.lat,A.lon,B.lat,B.lon),TRANSITION_PTS);
   let lc=0; for(const p of allPts) lc+=isLand(p.lat,p.lon);
-  document.getElementById('exp-pct').textContent=((1-lc/allPts.length)*100).toFixed(1)+'% ocean';
+  document.getElementById('exp-pct').textContent=fmtPct((1-lc/allPts.length)*100);
   map.getSource('gc-highlight').setData(emptyFC());
   const pts=subsample(allPts,DISPLAY_PTS);
   map.getSource('gc-line').setData({type:'FeatureCollection',
@@ -972,8 +950,7 @@ styleSelect.addEventListener('change',()=>map.setStyle(styleSelect.value));
 
 // ── Map init ──────────────────────────────────────────────────────────────────
 function animZoom() {
-  const bannerH = document.getElementById('banner').offsetHeight || 160;
-  const w = window.innerWidth, h = window.innerHeight - bannerH;
+  const w = window.innerWidth, h = window.innerHeight;
   // Globe diameter ≈ 512 * 2^z / π; solve for 80% of tighter dimension (10% margin each side)
   return Math.log2(0.8 * Math.min(w, h) * Math.PI / 512);
 }
@@ -1005,7 +982,6 @@ const map=new mapboxgl.Map({
 });
 map.addControl(new mapboxgl.AttributionControl({compact:true}),'bottom-right');
 map.addControl(new NorthUpControl(),'top-left');
-map.addControl(new mapboxgl.ScaleControl({maxWidth:160,unit:'metric'}),'bottom-right');
 
 map.on('style.load',()=>{ styleReady=true; setupAllLayers(); });
 map.on('moveend',updateGrid);
@@ -1013,12 +989,18 @@ map.on('zoomend',updateGrid);
 
 map.once('load',()=>{
   map.on('zoom',()=>{}); // keep zoom events flowing
-  map.on('mousemove',()=>{ if(appState==='explorer') map.getCanvas().style.cursor='crosshair'; });
+  map.on('mousemove',e=>{
+    if (appState==='explorer') { map.getCanvas().style.cursor='crosshair'; return; }
+    if (appState==='examine') {
+      const hit = nearestAnimCircle(e.lngLat, 3) !== null;
+      map.getCanvas().style.cursor = hit ? 'pointer' : '';
+    }
+  });
 
   map.on('click',e=>{
     if (appState==='loading') return;
     if (appState==='animation') { enterState('examine'); return; }
-    if (appState==='examine')   return; // pan/zoom only
+    if (appState==='examine')   { handleExamineClick(e); return; }
     if (appState==='explorer') {
       if (e.originalEvent._handled) return;
       handleExpClick(e); return;
@@ -1038,6 +1020,12 @@ map.once('load',()=>{
     }
     if ((appState==='revealed'||appState==='detailed')&&e.key==='Escape') clearPerturbed();
   });
+
+  map.getCanvas().addEventListener('mousedown',  () => { spinPaused = true; });
+  map.getCanvas().addEventListener('touchstart', () => { spinPaused = true; }, {passive:true});
+  document.addEventListener('mouseup',  () => { spinPaused = false; });
+  document.addEventListener('touchend', () => { spinPaused = false; });
+  map.on('dragstart', () => { if (appState==='animation') enterState('examine'); });
 });
 
 // ── Explorer click ────────────────────────────────────────────────────────────
@@ -1082,6 +1070,31 @@ function clearPerturbed() {
     drawHeatmap('hm-0',FINE_GRIDS[k0],null); drawHeatmap('hm-1',FINE_GRIDS[k1],null);
     updatePctEl(0,k0,undefined); updatePctEl(1,k1,undefined);
   }
+}
+
+// ── Examine click (pick a random GC) ─────────────────────────────────────────
+// Angular distance (degrees) from a unit-sphere point to a great circle's plane.
+function degToGC(lngLat, normal) {
+  const p = toXYZ(lngLat.lat, lngLat.lng);
+  const dot = p[0]*normal[0] + p[1]*normal[1] + p[2]*normal[2];
+  return Math.abs(Math.asin(Math.max(-1, Math.min(1, dot)))) * 180/Math.PI;
+}
+// Returns index of nearest anim circle within thresholdDeg, or null.
+function nearestAnimCircle(lngLat, thresholdDeg) {
+  let best = null, bestDist = thresholdDeg;
+  for (let i = 0; i < animCircleData.length; i++) {
+    if (!animCircleData[i]?.normal) continue;
+    const d = degToGC(lngLat, animCircleData[i].normal);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  return best;
+}
+function handleExamineClick(e) {
+  const idx = nearestAnimCircle(e.lngLat, 5);
+  if (idx === null) return;
+  const d = animCircleData[idx];
+  document.getElementById('exam-pct').textContent = d.pct;
+  document.getElementById('exam-segments').innerHTML      = d.segments;
 }
 
 // ── Button handlers ───────────────────────────────────────────────────────────
