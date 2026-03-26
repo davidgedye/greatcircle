@@ -95,15 +95,22 @@
     }
 
     /* ── Navigation controls ───────────────────────────────────────── */
-    /* Push NorthUp below the logo (logo is ~108px from top of viewport) */
-    .mapboxgl-ctrl-top-left { margin-top: 108px; }
-    body.state-loading   .mapboxgl-ctrl-top-left,
-    body.state-animation .mapboxgl-ctrl-top-left,
-    body.state-examine   .mapboxgl-ctrl-top-left { display: none !important; }
+    /* ── North-up button (sits left of style selector) ─────────────── */
+    #north-up-btn {
+      position: absolute; bottom: 32px; left: 12px; z-index: 10;
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px;
+      background: rgba(0,0,0,0.72); border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 5px; cursor: pointer;
+    }
+    #north-up-btn:hover { background: rgba(40,40,40,0.9); }
+    body.state-loading   #north-up-btn,
+    body.state-animation #north-up-btn,
+    body.state-examine   #north-up-btn { display: none; }
 
     /* ── Overlays ──────────────────────────────────────────────────── */
     #style-select {
-      position: absolute; bottom: 32px; left: 12px;
+      position: absolute; bottom: 32px; left: 52px;
       background: rgba(0,0,0,0.72); color: #fff;
       font: 13px/1 'Helvetica Neue', sans-serif;
       padding: 8px 10px; border: 1px solid rgba(255,255,255,0.2);
@@ -186,6 +193,12 @@
   </div>
 </div>
 
+<button id="north-up-btn" title="Reset bearing to north">
+  <svg viewBox="0 0 29 29" width="18" height="18">
+    <path d="M10.5 14l4-8 4 8h-8z" fill="rgba(0,0,0,0.75)"/>
+    <path d="M10.5 16l4 8 4-8h-8z" fill="#bbb"/>
+  </svg>
+</button>
 <select id="style-select"></select>
 <div id="click-result"></div>
 
@@ -955,33 +968,13 @@ function animZoom() {
   return Math.log2(0.8 * Math.min(w, h) * Math.PI / 512);
 }
 
-class NorthUpControl {
-  onAdd(m) {
-    this._map = m;
-    this._btn = document.createElement('button');
-    this._btn.className = 'mapboxgl-ctrl-icon mapboxgl-ctrl-compass';
-    this._btn.type = 'button';
-    this._btn.title = 'Reset bearing to north';
-    this._btn.style.cssText = 'display:flex;align-items:center;justify-content:center;';
-    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
-    svg.setAttribute('viewBox','0 0 29 29');
-    svg.innerHTML = '<path d="M10.5 14l4-8 4 8h-8z" fill="rgba(0,0,0,0.7)"/><path d="M10.5 16l4 8 4-8h-8z" fill="#ccc"/>';
-    this._btn.appendChild(svg);
-    this._btn.addEventListener('click',()=>{ m.easeTo({bearing:0,duration:300}); });
-    this._container = document.createElement('div');
-    this._container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
-    this._container.appendChild(this._btn);
-    return this._container;
-  }
-  onRemove() { this._container.parentNode.removeChild(this._container); this._map = undefined; }
-}
 
 const map=new mapboxgl.Map({
   container:'map', style:STYLES[0].url, projection:'globe',
   center:[0,0], zoom:animZoom(), pitch:0, bearing:0, attributionControl:false,
 });
 map.addControl(new mapboxgl.AttributionControl({compact:true}),'bottom-right');
-map.addControl(new NorthUpControl(),'top-left');
+document.getElementById('north-up-btn').addEventListener('click',()=>map.easeTo({bearing:0,duration:300}));
 
 map.on('style.load',()=>{ styleReady=true; setupAllLayers(); });
 map.on('moveend',updateGrid);
