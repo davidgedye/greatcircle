@@ -388,8 +388,8 @@ function refreshCoarseSegments() {
     const fc = DATA[key + '-coarse'];
     if (!fc || !fc.features) return;
     const features = [];
-    fc.features.forEach(f => {
-      const { theta, phi } = f.properties || {};
+    fc.features.forEach((f, fi) => {
+      const { theta, phi, ocean_pct } = f.properties || {};
       if (theta == null || phi == null) return;
       const nVec = thetaPhiToNormal(theta, phi);
       const ref = Math.abs(nVec[0]) < 0.9 ? [1,0,0] : [0,1,0];
@@ -404,7 +404,9 @@ function refreshCoarseSegments() {
         pts.push([Math.atan2(py, px) * 180 / Math.PI,
                   Math.asin(Math.max(-1, Math.min(1, pz))) * 180 / Math.PI]);
       }
-      features.push(...buildSegmentFeatures(pts, displayStep, side === 'dry'));
+      const segs = buildSegmentFeatures(pts, displayStep, side === 'dry');
+      segs.forEach(s => Object.assign(s.properties, { rank: fi + 1, ocean_pct }));
+      features.push(...segs);
     });
     src.setData({ type: 'FeatureCollection', features });
   });
@@ -416,6 +418,22 @@ function expFmt(key, frac) {
   return INVERT[key]
     ? `${((1 - frac) * 100).toFixed(2)}% land`
     : `${(frac * 100).toFixed(2)}% ocean`;
+}
+
+function pctFmt(key, frac) {
+  const v = INVERT[key] ? (1 - frac) : frac;
+  return (v * 100).toFixed(2) + '%';
+}
+
+function updatePctEl(idx, key, perturbedFrac) {
+  const el = document.getElementById(`hm-${idx}-pct`);
+  const best = pctFmt(key, FINE_GRIDS[key].best_frac);
+  if (perturbedFrac !== undefined) {
+    el.innerHTML = `<span style="color:#fff">${best}</span>&ensp;`
+                 + `<span style="color:${COLORS[idx]}">${pctFmt(key, perturbedFrac)}</span>`;
+  } else {
+    el.innerHTML = `<span style="color:#fff">${best}</span>`;
+  }
 }
 
 // ── Heatmap rendering ────────────────────────────────────────────────────────
@@ -472,17 +490,13 @@ function renderHeatmaps() {
     const gd  = FINE_GRIDS[key];
     drawHeatmap(`hm-${i}`, gd);
     document.getElementById(`hm-${i}-label`).textContent = i === 0 ? 'WETTEST' : 'DRIEST';
-    const pctEl = document.getElementById(`hm-${i}-pct`);
-    pctEl.textContent = expFmt(key, gd.best_frac) + ' (best)';
-    pctEl.style.color = COLORS[i];
+    updatePctEl(i, key, undefined);
   }
 }
 
 function initHeatmap(idx) {
   const canvasId = `hm-${idx}`;
-  const pctId    = `hm-${idx}-pct`;
   const canvas   = document.getElementById(canvasId);
-  const pct      = document.getElementById(pctId);
 
   canvas.addEventListener('click', e => {
     const key   = ACTIVE()[idx];
@@ -498,7 +512,8 @@ function initHeatmap(idx) {
     const pDeg = data.phi_center_deg   + data.offsets_deg[j];
     const nVec = thetaPhiToNormal(tDeg, pDeg);
     const frac = data.grid[i][j];
-    pct.textContent = expFmt(key, frac);
+    updatePctEl(idx, key, frac);
+    updatePctEl(1 - idx, ACTIVE()[1 - idx], undefined);
 
     if (map.getSource('perturbed')) {
       map.getSource('perturbed').setData({
@@ -507,8 +522,6 @@ function initHeatmap(idx) {
                      geometry: { type: 'LineString', coordinates: gcCoords(nVec) } }]
       });
     }
-    clickResult.textContent = `${idx === 0 ? 'Wettest' : 'Driest'}: ${expFmt(key, frac)}  ·  ${poleStr(tDeg, pDeg)}`;
-    clickResult.style.display = 'block';
     drawHeatmap(canvasId, data, { i_f: i, j_f: j, color });
     drawHeatmap(`hm-${1 - idx}`, FINE_GRIDS[ACTIVE()[1 - idx]], null);
   });
@@ -532,14 +545,6 @@ function renderSummaryRows() {
   document.getElementById('dry-pct').textContent = expFmt(DRY(), BEST_FRACS[DRY()]);
 }
 
-// ── Swatch helper ─────────────────────────────────────────────────────────────
-function swatchHtml(color, dashed) {
-  const bg = dashed
-    ? `repeating-linear-gradient(90deg,${color} 0 5px,transparent 5px 9px)`
-    : color;
-  return `<span style="display:inline-block;width:22px;height:3px;background:${bg};`
-       + `vertical-align:middle;border-radius:1px;margin:0 5px 1px 0"></span>`;
-}
 
 function poleStr(tDeg, pDeg) {
   const lat  = 90 - tDeg;
@@ -705,6 +710,8 @@ function clearPerturbed() {
     const [k0, k1] = ACTIVE();
     drawHeatmap('hm-0', FINE_GRIDS[k0], null);
     drawHeatmap('hm-1', FINE_GRIDS[k1], null);
+    updatePctEl(0, k0, undefined);
+    updatePctEl(1, k1, undefined);
   }
 }
 
@@ -715,6 +722,7 @@ map.on('click', e => {
   const features = [];
   const parts    = [];
   const hmHL     = {};
+  const fracs    = {};
   const active   = ACTIVE();
 
   for (let si = 0; si < 2; si++) {
@@ -733,20 +741,21 @@ map.on('click', e => {
       type: 'Feature', properties: { color },
       geometry: { type: 'LineString', coordinates: gcCoords(n1) }
     });
-    const lbl = si === 0 ? 'Wettest' : 'Driest';
-    parts.push(swatchHtml(color, false) + `${lbl}: ${expFmt(key, gd.best_frac)}`
-             + `&ensp;` + swatchHtml(color, true) + expFmt(key, frac));
+    parts.push(expFmt(key, frac));
+    fracs[si] = frac;
     const pos = gridCoords(gd, tn, pn);
     if (pos) hmHL[si] = { ...pos, color };
   }
 
   if (features.length === 0) { clearPerturbed(); return; }
   map.getSource('perturbed').setData({ type: 'FeatureCollection', features });
-  clickResult.innerHTML = parts.join('&ensp;&nbsp;·&ensp;&nbsp;');
+  clickResult.textContent = parts.join('  ·  ');
   clickResult.style.display = 'block';
   const [k0, k1] = ACTIVE();
   drawHeatmap('hm-0', FINE_GRIDS[k0], hmHL[0] || null);
   drawHeatmap('hm-1', FINE_GRIDS[k1], hmHL[1] || null);
+  updatePctEl(0, k0, fracs[0]);
+  updatePctEl(1, k1, fracs[1]);
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') clearPerturbed(); });
@@ -926,6 +935,17 @@ function setupMapLayers() {
     });
   });
   if (mask && coarseSegmentsBuilt) refreshCoarseSegments();
+
+  ['wet', 'dry'].forEach(side => {
+    map.on('click', `coarse-segments-${side}`, e => {
+      e.originalEvent._handled = true;
+      const p = e.features[0].properties;
+      clickResult.textContent = `Candidate #${p.rank}, ${p.ocean_pct}`;
+      clickResult.style.display = 'block';
+    });
+    map.on('mousemove',  `coarse-segments-${side}`, () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', `coarse-segments-${side}`, () => { map.getCanvas().style.cursor = ''; });
+  });
 
   // Hover tooltip
   const tip = document.getElementById('tooltip');

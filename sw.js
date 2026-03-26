@@ -1,4 +1,4 @@
-const CACHE_NAME = 'greatcircle-v22';
+const CACHE_NAME = 'greatcircle-v23';
 
 self.addEventListener('install', event => {
   event.waitUntil(
