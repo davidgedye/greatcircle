@@ -1,7 +1,7 @@
 {
   "name": "Great Circle Challenge",
   "short_name": "Great Circles",
-  "start_url": "/greatcircle/combined.html",
+  "start_url": "/greatcircle/",
   "display": "standalone",
   "background_color": "#080e18",
   "theme_color": "#080e18",

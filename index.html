@@ -1,292 +1,322 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Great Circles — Wettest &amp; Driest</title>
-<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
-<link rel="manifest" href="/greatcircle/manifest.json">
-<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/greatcircle/sw.js');</script>
-<link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
-<script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #000; font-family: 'Courier New', monospace; }
-  #map { position: absolute; inset: 0; }
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Great Circles</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000;
+      font-family: 'Courier New', monospace; position: relative; }
 
-  /* ── Right column (stacks panel + map card) ── */
-  #right-col {
-    position: absolute; top: 16px; right: 16px;
-    display: flex; flex-direction: column; gap: 10px;
-  }
+    /* ── Map fills full window ──────────────────────────────────────── */
+    #map { position: absolute; inset: 0; }
 
-  /* ── Panel shell ── */
-  #panel {
-    background: rgba(8,8,8,0.82); border: 1px solid #2a2a2a;
-    border-radius: 8px; padding: 14px 16px; color: #ccc;
-    font-size: 12px; min-width: 240px;
-    backdrop-filter: blur(6px);
-    position: relative;
-  }
-  #summary-area { display: flex; align-items: center; gap: 10px; }
-  #summary-area #summary { flex: 1; }
-  #info-btn {
-    background: none; border: 1px solid #888; border-radius: 50%;
-    color: #888; font-size: 16px; font-family: serif; font-style: italic; font-weight: bold;
-    width: 28px; height: 28px; text-align: center; flex-shrink: 0;
-    cursor: pointer; padding: 0; text-decoration: none;
-    display: flex; align-items: center; justify-content: center;
-  }
-  #info-btn:hover { color: #ccc; border-color: #ccc; }
-
-  /* ── Map card ── */
-  #map-card {
-    background: rgba(8,8,8,0.82); border: 1px solid #2a2a2a;
-    border-radius: 8px; padding: 8px 12px;
-    backdrop-filter: blur(6px);
-  }
-  #panel h3 {
-    font-size: 11px; color: #888; margin-bottom: 10px; letter-spacing: 2px;
-    border-bottom: 1px solid #2a2a2a; padding-bottom: 7px;
-  }
-  #panel-body { overflow: visible; }
-
-  /* ── Summary rows ── */
-  #summary { margin-bottom: 4px; }
-  .summary-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
-  .summary-row + .summary-row { border-top: 1px solid #1e1e1e; }
-  .row-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; opacity: 0.9; }
-  .row-info { display: flex; flex-direction: column; gap: 1px; }
-  .row-lbl { font-size: 11px; color: #bbb; }
-  .row-pct { font-size: 13px; font-weight: bold; }
-
-  /* ── Collapsible Details section ── */
-  .section-hdr {
-    display: flex; justify-content: space-between; align-items: center;
-    font-size: 11px; color: #999; letter-spacing: 2px;
-    cursor: pointer; user-select: none;
-    padding: 9px 0; border-top: 1px solid #444; margin-top: 4px;
-  }
-  .section-hdr:hover { color: #ddd; }
-  .sec-chevron { font-size: 13px; }
-  .section-body {
-    overflow: hidden; max-height: 0; opacity: 0;
-    transition: max-height 0.3s ease, opacity 0.25s ease;
-  }
-  .section-body.open { max-height: 2000px; opacity: 1; overflow: visible; }
-
-  /* ── Layer toggles ── */
-  .row { display: flex; align-items: center; margin: 6px 0; gap: 8px; cursor: pointer; }
-  .row input { cursor: pointer; margin: 0; accent-color: #aaa; }
-  .swatch { width: 26px; height: 3px; border-radius: 1px; flex-shrink: 0; }
-  .swatch.dashed {
-    background: repeating-linear-gradient(90deg,
-      var(--c) 0 5px, transparent 5px 9px) !important;
-  }
-  .row label { cursor: pointer; line-height: 1.4; }
-  #toggles { margin-top: 6px; }
-
-  /* ── Heatmaps ── */
-  #heatmaps { margin-bottom: 8px; }
-  .hm-pair { display: flex; flex-direction: column; gap: 10px; align-items: center; }
-  .hm-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .hm-label { font-size: 10px; color: #888; letter-spacing: 1px; text-align: center; }
-  .hm-pct   { font-size: 11px; font-weight: bold; }
-  canvas.heatmap {
-    image-rendering: pixelated;
-    border: 1px solid #333; border-radius: 2px; cursor: crosshair;
-  }
-
-  /* ── Style switcher ── */
-  #style-switcher { display: flex; align-items: center; }
-  #style-switcher select {
-    flex: 1; background: #1a1a1a; color: #ccc; border: 1px solid #333;
-    border-radius: 4px; padding: 4px 6px; font-size: 12px; font-family: inherit; cursor: pointer;
-  }
-
-  #mobile-hint { display: none; }
-  #mobile-title { display: none; }
-
-  /* ── Mobile bottom bar ── */
-  @media (max-width: 640px) {
-    #right-col {
-      top: 0; bottom: auto; left: 0; right: 0;
-      flex-direction: row; align-items: stretch;
-      padding: 0; gap: 0;
+    /* ── Logo panel (top-left) ──────────────────────────────────────── */
+    #logo-panel {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      line-height: 0;  /* collapse img whitespace */
+      cursor: pointer;
     }
-    #panel {
-      flex: 1; min-width: 0;
-      border-radius: 0 0 0 10px; border-top: none; border-right: none;
-      padding: 8px 12px;
-      display: flex; flex-direction: column; justify-content: center; align-items: center;
-    }
-    #map-card {
-      border-radius: 0 0 10px 0; border-top: none; border-left: none;
-      padding: 8px 12px;
-      display: flex; align-items: center;
-    }
-    #panel h3, .section-hdr, .section-body { display: none; }
-    #summary { display: flex; flex-direction: row; align-items: baseline; gap: 12px; margin: 0; justify-content: center; width: 100%; }
-    .summary-row { padding: 0; flex-direction: row; align-items: baseline; gap: 5px; }
-    .summary-row + .summary-row { border-top: none; }
-    .row-info { flex-direction: row; align-items: baseline; gap: 5px; }
-    .row-swatch { display: none; }
-    .row-lbl { font-size: 10px; }
-    .row-pct { font-size: 13px; }
-    #mobile-title {
-      display: block; padding-top: 5px; margin-bottom: 6px;
-      font-size: 13px; color: #aaa; letter-spacing: 1.5px;
-      text-align: center; width: 100%; text-transform: uppercase;
-    }
-    #mobile-hint {
-      display: block; margin-top: 3px;
-      font-size: 10px; color: #888; letter-spacing: 0.3px;
-      text-align: center; width: 100%;
-    }
-    #style-switcher { flex-direction: column; gap: 4px; }
-    #style-switcher span { display: none; }
-    #style-switcher select { padding: 3px 4px; font-size: 10px; }
-    #tooltip, #click-result { display: none !important; }
-    #map-card { display: none; }
-    .mapboxgl-ctrl-scale { display: none; }
-    .mapboxgl-ctrl-top-left { display: none; }
-    #info-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
-    #summary-area { margin-right: 0; width: 100%; justify-content: center; }
-  }
 
-  /* ── HUD overlays ── */
-  #tooltip {
-    position: absolute; bottom: 22px; left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.85); border: 1px solid #333;
-    color: #eee; font-size: 12px; padding: 7px 14px;
-    border-radius: 5px; pointer-events: none;
-    opacity: 0; transition: opacity 0.15s; white-space: nowrap;
-  }
-  #tooltip.on { opacity: 1; }
-  #click-result {
-    position: absolute; bottom: 58px; left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.88); border: 1px solid #555;
-    color: #eee; font-size: 12px; font-family: monospace;
-    padding: 7px 16px; border-radius: 5px;
-    pointer-events: none; display: none; white-space: nowrap;
-  }
-</style>
+    /* ── Message card ───────────────────────────────────────────────── */
+    #message-card {
+      position: absolute; z-index: 10;
+      display: none; flex-direction: column; gap: 16px;
+      background: rgba(8,8,8,0.88); border: 1px solid #2a2a2a;
+      border-radius: 12px; color: #ddd; line-height: 1.55;
+      backdrop-filter: blur(6px);
+    }
+    .card-section { display: none; flex-direction: column; gap: 14px; }
+    .card-big-pct { font-size: 2em; font-weight: bold; color: #fff; }
+    #exp-records { display: flex; flex-direction: column; gap: 6px; }
+    #exp-records.dimmed { opacity: 0.35; pointer-events: none; }
+    .rev-item { display: flex; align-items: baseline; gap: 8px; }
+    .rev-dot { font-size: 1.2em; }
+    #about-link { color: #888; font-size: 0.85em; text-decoration: underline; }
+    #about-link:hover { color: #ccc; }
+
+    /* Shared button style */
+    #try-btn, #reveal-btn, #details-btn {
+      background: rgba(255,255,255,0.07); color: #bbb;
+      border: 1px solid rgba(255,255,255,0.18); border-radius: 5px;
+      padding: 10px 14px; font-size: 0.8em; letter-spacing: 2px;
+      font-family: inherit; cursor: pointer; text-transform: uppercase;
+      transition: background 0.15s; width: 100%;
+    }
+    #try-btn:hover, #details-btn:hover { background: rgba(255,255,255,0.15); }
+    #reveal-btn:hover:not(:disabled) { background: rgba(255,255,255,0.15); }
+    #reveal-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* Desktop landscape: card right of globe, vertically centred */
+    @media (orientation: landscape) {
+      #message-card {
+        right: 24px; top: 50%; transform: translateY(-50%);
+        width: max(200px, calc(50vw - 40vh - 36px));
+        max-height: 80vh; overflow-y: auto;
+        padding: 28px; font-size: min(2.2vh, 20px);
+      }
+      body.state-detailed #message-card { top: 12px; transform: none; }
+      .msg-mobile { display: none; }
+    }
+
+    /* Mobile portrait: card below globe, horizontally centred */
+    @media (orientation: portrait) {
+      #message-card {
+        bottom: 44px; left: 50%; transform: translateX(-50%);
+        width: calc(100vw - 32px);
+        max-height: max(120px, calc(50vh - 40vw - 20px));
+        overflow-y: auto;
+        padding: 16px; font-size: min(4.2vw, 17px);
+      }
+      .msg-desktop { display: none; }
+      #details-btn { display: none !important; }
+      .card-big-pct { text-align: center; }
+    }
+
+    /* ── Details panel (desktop / landscape only) ───────────────────── */
+    #details-panel {
+      display: none; position: absolute;
+      right: 24px; top: 160px; bottom: 12px;
+      width: max(200px, calc(50vw - 40vh - 36px));
+      overflow-y: auto;
+      background: rgba(8,8,8,0.88); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 14px 14px 16px;
+      flex-direction: column; gap: 16px;
+      backdrop-filter: blur(6px); z-index: 10;
+    }
+    body.state-detailed #details-panel { display: flex; }
+    #toggles { display: flex; flex-direction: column; gap: 8px; }
+    .tog-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .tog-row input { cursor: pointer; margin: 0; accent-color: #aaa; }
+    .tog-swatch { width: 26px; height: 3px; border-radius: 1px; flex-shrink: 0; }
+    .tog-row label { cursor: pointer; font-size: 11px; line-height: 1.4; color: #aaa; }
+    #heatmaps { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+    .hm-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .hm-label { font-size: 10px; color: #888; letter-spacing: 1px; text-align: center; }
+    .hm-pct   { font-size: 11px; font-weight: bold; }
+    canvas.heatmap {
+      image-rendering: pixelated;
+      border: 1px solid #333; border-radius: 2px; cursor: crosshair;
+    }
+    @media (orientation: portrait) {
+      #details-panel { display: none !important; }
+    }
+
+    /* ── Overlays ──────────────────────────────────────────────────── */
+    #click-result {
+      position: absolute; bottom: 58px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.88); border: 1px solid #555;
+      color: #eee; font-size: 12px; font-family: monospace;
+      padding: 7px 16px; border-radius: 5px;
+      pointer-events: none; display: none; white-space: nowrap; z-index: 5;
+    }
+    @media (max-width: 640px) { #click-result { display: none !important; } }
+  </style>
 </head>
-<body>
+<body class="state-loading">
+
 <div id="map"></div>
 
-<div id="right-col">
+<!-- Logo (top-left) -->
+<div id="logo-panel">
+  <img src="logo.svg" alt="Great Circle Challenge" width="110">
+</div>
 
-<div id="panel">
-  <h3 id="panel-title">GREAT CIRCLES OF THE EARTH</h3>
-  <div id="panel-body">
+<!-- Message card -->
+<div id="message-card">
 
-    <div id="mobile-title">Great Circles of the Earth</div>
-
-    <div id="summary-area">
-      <div id="summary">
-        <div class="summary-row">
-          <div class="row-swatch" style="background:#00e5ff"></div>
-          <div class="row-info">
-            <div class="row-lbl">Wettest</div>
-            <div class="row-pct" id="wet-pct" style="color:#00e5ff">–</div>
-          </div>
-        </div>
-        <div class="summary-row">
-          <div class="row-swatch" style="background:#ff1744"></div>
-          <div class="row-info">
-            <div class="row-lbl">Driest</div>
-            <div class="row-pct" id="dry-pct" style="color:#ff1744">–</div>
-          </div>
-        </div>
-      </div>
-      <a id="info-btn" href="about.html" title="About this project">i</a>
-    </div>
-
-    <div id="mobile-hint">More fun on a bigger screen</div>
-
-    <!-- Details section -->
-    <div class="section-hdr" id="details-hdr">
-      <span>DETAILS</span><span class="sec-chevron">▸</span>
-    </div>
-    <div class="section-body" id="details-body">
-      <div id="toggles"></div>
-      <div id="heatmaps">
-        <div class="hm-pair">
-          <div class="hm-block">
-            <div class="hm-label" id="hm-0-label"></div>
-            <canvas class="heatmap" id="hm-0" width="160" height="160"></canvas>
-            <div class="hm-pct" id="hm-0-pct"></div>
-          </div>
-          <div class="hm-block">
-            <div class="hm-label" id="hm-1-label"></div>
-            <canvas class="heatmap" id="hm-1" width="160" height="160"></canvas>
-            <div class="hm-pct" id="hm-1-pct"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </div><!-- /panel-body -->
-</div><!-- /panel -->
-
-<div id="map-card">
-  <div id="style-switcher">
-    <span style="font-size:10px;color:#888;letter-spacing:2px;margin-right:8px;">MAP</span>
+  <!-- Animation phase 1 (desktop: combined message; mobile: message 1 only) -->
+  <div id="card-anim1" class="card-section">
+    <span class="msg-desktop"><p>A "great circle" is the closest thing to a straight line on a sphere. The equator is a great circle and so is every circle that goes through the poles.</p><p>&nbsp;</p><p>These lines show random great circles. Pan and zoom to see which parts are over water (in blue) and which over land (in red). Click on one and you'll see the exact percentage.</p></span>
+    <span class="msg-mobile">A "great circle" is the closest thing to a straight line on a sphere. The equator is a great circle and so is every circle that goes through the poles…</span>
   </div>
-</div><!-- /map-card -->
 
-</div><!-- /right-col -->
+  <!-- Animation phase 2 / pre-selection examine (mobile only) -->
+  <div id="card-anim2" class="card-section">
+    <span class="msg-mobile">Click on a great circle to see the percentage of land and ocean.</span>
+  </div>
 
-<div id="tooltip"></div>
+  <!-- Examine: circle selected -->
+  <div id="card-examine" class="card-section">
+    <div id="exam-pct" class="card-big-pct"></div>
+    <div class="msg-desktop">I wanted to know what the limits were. Was there any great circle that was at least 90% ocean? (Spoiler: yes). What about 50% land?</div>
+    <button id="try-btn">Make your own Great Circle</button>
+  </div>
+
+  <!-- Explorer -->
+  <div id="card-explorer" class="card-section">
+    <div class="msg-desktop">Two points on the globe define a great circle, so click on two spots and see what you get. Try to find a circle that is more than 80% ocean. How about a really dry one?</div>
+    <div class="msg-mobile">Click on two points to specify a great circle.</div>
+    <div id="exp-records" class="dimmed">
+      <div>Your wettest so far: <strong id="exp-wet-val">–</strong></div>
+      <div>Your driest so far: <strong id="exp-dry-val">–</strong></div>
+      <div>Can you do better?</div>
+    </div>
+    <button id="reveal-btn" disabled>Show absolute wettest and driest</button>
+  </div>
+
+  <!-- Reveal / Detailed -->
+  <div id="card-reveal" class="card-section">
+    <div class="rev-item">
+      <span class="rev-dot" style="color:#00e5ff">●</span>
+      <span style="color:#00e5ff">Wettest <strong id="rev-wet-pct">–</strong></span>
+    </div>
+    <div class="rev-item">
+      <span class="rev-dot" style="color:#ff1744">●</span>
+      <span style="color:#ff1744">Driest <strong id="rev-dry-pct">–</strong></span>
+    </div>
+    <a href="about.html" target="_blank" id="about-link">How I calculated this</a>
+    <button id="details-btn">Details</button>
+  </div>
+
+</div><!-- /message-card -->
+
+<!-- Details panel (desktop only, floats over map) -->
+<div id="details-panel">
+  <div id="toggles"></div>
+  <div id="heatmaps">
+    <div class="hm-block">
+      <div class="hm-label" id="hm-0-label"></div>
+      <canvas class="heatmap" id="hm-0" width="160" height="160"></canvas>
+      <div class="hm-pct" id="hm-0-pct"></div>
+    </div>
+    <div class="hm-block">
+      <div class="hm-label" id="hm-1-label"></div>
+      <canvas class="heatmap" id="hm-1" width="160" height="160"></canvas>
+      <div class="hm-pct" id="hm-1-pct"></div>
+    </div>
+  </div>
+</div>
+
 <div id="click-result"></div>
 
 <script>
-let DATA, LAYERS, BEST_FRACS, FINE_GRIDS;
-
-// ── Dataset ───────────────────────────────────────────────────────────────────
+// ── Config ────────────────────────────────────────────────────────────────────
+mapboxgl.accessToken = 'pk.eyJ1IjoiZGF2aWRnZWR5ZSIsImEiOiJjbWtvejk5bWkwYnBxM3JxNTE0ZjN6ZmowIn0.CaVScVkAo9uhpyebGqaQNg';
 const VISUALS_URL = 'experiments/wettest_driest/etopo_visuals.json';
 const DETAILS_URL = 'experiments/wettest_driest/etopo_details.json';
 
-// ── State ────────────────────────────────────────────────────────────────────
-const COLORS = ['#00e5ff', '#ff1744'];   // [wet=cyan, dry=red]
-
-const INVERT = { wettest: false, driest: true };
-
-function WET()    { return 'wettest'; }
-function DRY()    { return 'driest'; }
-function ACTIVE() { return [WET(), DRY()]; }
-
-// ── Mask (land/ocean coloring) ────────────────────────────────────────────────
 const MASK_NLAT = 10800, MASK_NLON = 21600;
-const TRANSITION_PTS = 21600;   // one per arc-minute column — matches ETOPO resolution
-const COARSE_TRANSITION_PTS = 3600;  // sufficient for coarse-grid (~1°) circles
-const COLOR_SEG_OCEAN = '#00bcd4';
-const COLOR_SEG_LAND  = '#e53935';
-const COLOR_SEG_MUTED = '#bbb';
-let mask = null;
-let coarseSegmentsBuilt = false;
+const DISPLAY_PTS = 1080;
+const TRANSITION_PTS = 21600;
+const COARSE_TRANSITION_PTS = 3600;
+const MAX_ANIM_CIRCLES = 10;
 
+const COLOR_OCEAN     = '#00bcd4';  // explorer/anim ocean segments
+const COLOR_LAND      = '#e53935';  // explorer/anim land segments
+const COLOR_DRAG      = '#aaa';
+const COLOR_SEG_OCEAN = '#00bcd4';  // reveal thick ocean
+const COLOR_SEG_LAND  = '#e53935';  // reveal thick land
+const COLOR_SEG_MUTED = '#bbb';     // reveal muted segments
+const COLORS  = ['#00e5ff', '#ff1744']; // [wet, dry] fine line colors
+const INVERT  = { wettest: false, driest: true };
+
+// ── App state ─────────────────────────────────────────────────────────────────
+let appState = 'loading';
+let mask = null, maskReady = false;
+let styleReady = false, dataReady = false;
+let DATA, LAYERS, BEST_FRACS, FINE_GRIDS;
+let detailsData = null;
+let coarseSegmentsBuilt = false, heatmapsInited = false, togglesBuilt = false;
+const coarseShow = { 'wet-coarse': true, 'dry-coarse': true };
+
+// Explorer
+let explorerPoints = [null, null], explorerMarkers = [null, null], explorerClickCount = 0;
+const undoStack = [];
+
+// Animation
+let animRAF = null, animInterval = null, animCircleCount = 0, animFeatures = [], animCircleData = [];
+let lastAnimPct = '', animDone = false;
+
+// Explorer best records
+let bestWetFrac = null, bestDryFrac = null;
+
+const isMobile  = () => window.matchMedia('(max-width:640px)').matches;
+const emptyFC   = () => ({ type: 'FeatureCollection', features: [] });
+
+// ── State machine ─────────────────────────────────────────────────────────────
+function enterState(s) {
+  onStateExit(appState);
+  appState = s;
+  document.body.className = 'state-' + s;
+  onStateEnter(s);
+}
+
+function showCard(sectionId) {
+  const card = document.getElementById('message-card');
+  card.querySelectorAll('.card-section').forEach(s => { s.style.display = 'none'; });
+  if (sectionId) {
+    document.getElementById(sectionId).style.display = 'flex';
+    card.style.display = 'flex';
+  } else {
+    card.style.display = 'none';
+  }
+}
+
+function onStateExit(s) {
+  if (s === 'animation') { stopSpinning(); stopAnimInterval(); animDone = false; }
+  if (s === 'examine')   { clearAnimLines(); clearSelectedCircle(); }
+  if (s === 'explorer')  { clearExplorer(); resetExpRecords(); }
+}
+
+function onStateEnter(s) {
+  if (s === 'loading')                          showCard(null);
+  if (s === 'animation')                        showCard('card-anim1');
+  if (s === 'examine')                          showCard(isMobile() ? 'card-anim2' : 'card-anim1');
+  if (s === 'explorer')                         showCard('card-explorer');
+  if (s === 'revealed' || s === 'detailed')     showCard('card-reveal');
+
+  if (s === 'animation') {
+    map.jumpTo({ center:[0,0], zoom:animZoom(), pitch:0, bearing:0, padding:getMapPadding() });
+    startSpinning(); startAnimInterval();
+  }
+  if (s === 'examine') {
+    clearSelectedCircle();
+    map.getCanvas().style.cursor = '';
+  }
+  if (s === 'explorer') {
+    map.getCanvas().style.cursor = 'crosshair';
+    map.easeTo({ center:[0,0], zoom:animZoom(), pitch:0, bearing:0, duration:800, padding:getMapPadding() });
+  }
+  if (s === 'revealed') {
+    map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:1800, padding:getMapPadding() });
+    showRevealedCircles();
+  }
+  if (s === 'detailed') showRevealedCircles();
+  if (s === 'detailed' && !isMobile()) loadAndApplyDetails();
+}
+
+function reapplyCurrentState() {
+  if ((appState === 'animation' || appState === 'examine') && map.getSource('anim-lines') && animFeatures.length)
+    map.getSource('anim-lines').setData({ type:'FeatureCollection', features: animFeatures });
+  if (appState === 'explorer' && explorerPoints[0] && explorerPoints[1]) computeAndDraw();
+  if (appState === 'revealed' || appState === 'detailed') {
+    showRevealedCircles();
+    if (appState === 'detailed' && !isMobile()) loadAndApplyDetails();
+  }
+  updateGrid();
+}
+
+// ── Mask ──────────────────────────────────────────────────────────────────────
 async function loadMask() {
   try {
     const resp = await fetch('explorer/mask_60s.bin.gz');
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const piped = resp.body.pipeThrough(new DecompressionStream('gzip'));
-    const buf = await new Response(piped).arrayBuffer();
-    mask = new Uint8Array(buf);
-    if (styleReady && dataReady) {
-      refreshFineSegments();
-      if (document.getElementById('details-body').classList.contains('open')) refreshCoarseSegments();
-    }
-  } catch (e) { console.warn('Mask load failed:', e.message); }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    mask = new Uint8Array(await new Response(resp.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+    maskReady = true;
+    if (appState === 'loading') { enterState('animation'); }
+    else if ((appState === 'revealed' || appState === 'detailed') && styleReady && dataReady) refreshFineSegments();
+    updateGrid();
+  } catch(e) { console.error('Mask failed:', e); }
 }
 
 function isLand(lat, lon) {
-  // mask_60s.bin.gz: raw packed bits, 1=land 0=ocean, gzip-compressed.
-  // 10800 rows (south-to-north, row 0 = 90°S) × 21600 cols (west-to-east, col 0 = 180°W).
-  // Each ETOPO cell i occupies [i/60-90, (i+1)/60-90), so Math.floor gives the correct cell.
-  // Bit layout: byte i>>3, bit 7-(i&7) (MSB first, matching np.packbits default).
   let row = Math.floor((lat + 90) * 60);
   let col = Math.floor((lon + 180) * 60) % MASK_NLON;
   row = Math.max(0, Math.min(MASK_NLAT - 1, row));
@@ -295,764 +325,772 @@ function isLand(lat, lon) {
   return (mask[i >> 3] >> (7 - (i & 7))) & 1;
 }
 
-function splitAtAntimeridian(coords) {
-  if (coords.length < 2) return [coords];
-  const result = [];
-  let cur = [coords[0]];
-  for (let i = 1; i < coords.length; i++) {
-    const [pLon, pLat] = cur[cur.length - 1];
-    const [lon, lat]   = coords[i];
-    if (Math.abs(lon - pLon) > 180) {
-      const sign = lon < pLon ? 1 : -1;
-      const unwrapped = lon + sign * 360;
-      const t = (sign * 180 - pLon) / (unwrapped - pLon);
-      cur.push([sign * 180, pLat + t * (lat - pLat)]);
-      if (cur.length >= 2) result.push(cur);
-      cur = [[-sign * 180, pLat + t * (lat - pLat)], [lon, lat]];
-    } else {
-      cur.push([lon, lat]);
-    }
+// ── Math ──────────────────────────────────────────────────────────────────────
+function toXYZ(lat, lon) {
+  const φ=lat*Math.PI/180, λ=lon*Math.PI/180;
+  return [Math.cos(φ)*Math.cos(λ), Math.cos(φ)*Math.sin(λ), Math.sin(φ)];
+}
+function cross(a,b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function norm(v) { const m=Math.hypot(v[0],v[1],v[2]); return m<1e-12?v:v.map(x=>x/m); }
+function gcNormal(latA,lonA,latB,lonB) {
+  const a=toXYZ(latA,lonA), b=toXYZ(latB,lonB), c=cross(a,b);
+  const len=Math.hypot(c[0],c[1],c[2]);
+  if (len<1e-6) { const arb=Math.abs(a[0])<0.9?[1,0,0]:[0,1,0]; return norm(cross(a,arb)); }
+  return norm(c);
+}
+// Returns [{lat,lon},...] — used by explorer + animation paths
+function sampleGC(n, nPts) {
+  const arb=Math.abs(n[0])<0.9?[1,0,0]:[0,1,0];
+  const u=norm(cross(n,arb)), v=cross(n,u);
+  const pts=[];
+  for (let i=0;i<nPts;i++) {
+    const t=2*Math.PI*i/nPts, ct=Math.cos(t), st=Math.sin(t);
+    const p=[ct*u[0]+st*v[0], ct*u[1]+st*v[1], ct*u[2]+st*v[2]];
+    pts.push({ lat: Math.asin(Math.max(-1,Math.min(1,p[2])))*180/Math.PI,
+               lon: Math.atan2(p[1],p[0])*180/Math.PI });
   }
-  if (cur.length >= 2) result.push(cur);
+  return pts;
+}
+function splitAtAntimeridian(coords) {
+  if (coords.length<2) return [coords];
+  const result=[]; let cur=[coords[0]];
+  for (let i=1;i<coords.length;i++) {
+    const [pLon,pLat]=cur[cur.length-1], [lon,lat]=coords[i];
+    if (Math.abs(lon-pLon)>180) {
+      const sign=lon<pLon?1:-1, uw=lon+sign*360, t=(sign*180-pLon)/(uw-pLon), cLat=pLat+t*(lat-pLat);
+      cur.push([sign*180,cLat]); if (cur.length>=2) result.push(cur);
+      cur=[[-sign*180,cLat],[lon,lat]];
+    } else { cur.push([lon,lat]); }
+  }
+  if (cur.length>=2) result.push(cur);
   return result;
 }
-
-// pts: [[lon, lat], ...] at TRANSITION_PTS resolution; displayStep for coord subsampling.
-// thickOnLand: true → land segments are thick (driest), false → ocean segments are thick (wettest).
-function buildSegmentFeatures(pts, displayStep, thickOnLand) {
-  if (pts.length < 2) return [];
-  const features = [];
-  let segStart = 0;
-  let segLand = isLand(pts[0][1], pts[0][0]);
-
-  function flush(endIdx) {
-    if (endIdx - segStart < 1) return;
-    const coords = [];
-    for (let j = segStart; j <= endIdx; j += displayStep) coords.push(pts[j]);
-    if (coords[coords.length - 1] !== pts[endIdx]) coords.push(pts[endIdx]);
-    const thick = thickOnLand ? !!segLand : !segLand;
-    const color = thick ? (segLand ? COLOR_SEG_LAND : COLOR_SEG_OCEAN) : COLOR_SEG_MUTED;
-    for (const seg of splitAtAntimeridian(coords))
-      features.push({ type: 'Feature',
-        geometry: { type: 'LineString', coordinates: seg },
-        properties: { color, thick } });
-  }
-
-  for (let i = 1; i < pts.length; i++) {
-    const curr = isLand(pts[i][1], pts[i][0]);
-    if (curr !== segLand) { flush(i); segStart = i; segLand = curr; }
-  }
-  flush(pts.length - 1);
-  return features;
+function subsample(pts,n) {
+  const step=Math.max(1,Math.round(pts.length/n)); const out=[];
+  for (let i=0;i<pts.length;i+=step) out.push(pts[i]); return out;
 }
-
-function refreshFineSegments() {
-  if (!mask || !DATA || !map.getSource('fine-segments')) return;
-  const features = [];
-  const displayStep = Math.max(1, Math.round(TRANSITION_PTS / 3600));
-  [WET(), DRY()].forEach(key => {
-    const fc = DATA[key + '-fine'];
-    if (!fc || !fc.features || !fc.features.length) return;
-    const { theta, phi } = fc.features[0].properties || {};
-    if (theta == null || phi == null) return;
-    const nVec = thetaPhiToNormal(theta, phi);
-    const ref = Math.abs(nVec[0]) < 0.9 ? [1,0,0] : [0,1,0];
-    const u = vnorm(vcross(nVec, ref));
-    const v = vcross(nVec, u);
-    const pts = [];
-    for (let i = 0; i < TRANSITION_PTS; i++) {
-      const t = 2 * Math.PI * i / TRANSITION_PTS;
-      const px = Math.cos(t)*u[0] + Math.sin(t)*v[0];
-      const py = Math.cos(t)*u[1] + Math.sin(t)*v[1];
-      const pz = Math.cos(t)*u[2] + Math.sin(t)*v[2];
-      pts.push([Math.atan2(py, px) * 180 / Math.PI,
-                Math.asin(Math.max(-1, Math.min(1, pz))) * 180 / Math.PI]);
-    }
-    const thickOnLand = key === DRY();
-    features.push(...buildSegmentFeatures(pts, displayStep, thickOnLand));
-  });
-  map.getSource('fine-segments').setData({ type: 'FeatureCollection', features });
-  // Hide the monochromatic fine lines — segments are the canonical display
-  [WET() + '-fine', DRY() + '-fine'].forEach(id => {
-    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
-  });
-}
-
-function refreshCoarseSegments() {
-  if (!mask || !DATA) return;
-  const displayStep = Math.max(1, Math.round(COARSE_TRANSITION_PTS / 360));
-  ['wet', 'dry'].forEach(side => {
-    const src = map.getSource(`coarse-segments-${side}`);
-    if (!src) return;
-    const key = side === 'wet' ? WET() : DRY();
-    const fc = DATA[key + '-coarse'];
-    if (!fc || !fc.features) return;
-    const features = [];
-    fc.features.forEach((f, fi) => {
-      const { theta, phi, ocean_pct } = f.properties || {};
-      if (theta == null || phi == null) return;
-      const nVec = thetaPhiToNormal(theta, phi);
-      const ref = Math.abs(nVec[0]) < 0.9 ? [1,0,0] : [0,1,0];
-      const u = vnorm(vcross(nVec, ref));
-      const v = vcross(nVec, u);
-      const pts = [];
-      for (let i = 0; i < COARSE_TRANSITION_PTS; i++) {
-        const t = 2 * Math.PI * i / COARSE_TRANSITION_PTS;
-        const px = Math.cos(t)*u[0] + Math.sin(t)*v[0];
-        const py = Math.cos(t)*u[1] + Math.sin(t)*v[1];
-        const pz = Math.cos(t)*u[2] + Math.sin(t)*v[2];
-        pts.push([Math.atan2(py, px) * 180 / Math.PI,
-                  Math.asin(Math.max(-1, Math.min(1, pz))) * 180 / Math.PI]);
-      }
-      const segs = buildSegmentFeatures(pts, displayStep, side === 'dry');
-      segs.forEach(s => Object.assign(s.properties, { rank: fi + 1, ocean_pct }));
-      features.push(...segs);
-    });
-    src.setData({ type: 'FeatureCollection', features });
-  });
-  coarseSegmentsBuilt = true;
-  applyCoarseVisibility();
-}
-
-function expFmt(key, frac) {
-  return INVERT[key]
-    ? `${((1 - frac) * 100).toFixed(2)}% land`
-    : `${(frac * 100).toFixed(2)}% ocean`;
-}
-
-function pctFmt(key, frac) {
-  const v = INVERT[key] ? (1 - frac) : frac;
-  return (v * 100).toFixed(2) + '%';
-}
-
-function updatePctEl(idx, key, perturbedFrac) {
-  const el = document.getElementById(`hm-${idx}-pct`);
-  const best = pctFmt(key, FINE_GRIDS[key].best_frac);
-  if (perturbedFrac !== undefined) {
-    el.innerHTML = `<span style="color:#fff">${best}</span>&ensp;`
-                 + `<span style="color:${COLORS[idx]}">${pctFmt(key, perturbedFrac)}</span>`;
-  } else {
-    el.innerHTML = `<span style="color:#fff">${best}</span>`;
-  }
-}
-
-// ── Heatmap rendering ────────────────────────────────────────────────────────
-function heatColor(t) {
-  const r = Math.round(255 * (1 - t) * (t < 0.5 ? 1 : 2 * (1 - t)));
-  const g = Math.round(255 * Math.min(2 * t, 2 * (1 - t)) * 0.5);
-  const b = Math.round(255 * t * (t > 0.5 ? 1 : 2 * t));
-  return [r, g, b];
-}
-
-function drawHeatmap(canvasId, data, highlight = null) {
-  const canvas = document.getElementById(canvasId);
-  const ctx = canvas.getContext('2d');
-  const n = data.grid.length;
-
-  let min = Infinity, max = -Infinity;
-  data.grid.forEach(row => row.forEach(v => { min = Math.min(min, v); max = Math.max(max, v); }));
-  const range = max - min || 1;
-
-  const off = document.createElement('canvas');
-  off.width = n; off.height = n;
-  const octx = off.getContext('2d');
-  const img = octx.createImageData(n, n);
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      const t = (data.grid[i][j] - min) / range;
-      const c = heatColor(t);
-      const idx = (i * n + j) * 4;
-      img.data[idx] = c[0]; img.data[idx+1] = c[1]; img.data[idx+2] = c[2]; img.data[idx+3] = 255;
-    }
-  }
-  octx.putImageData(img, 0, 0);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
-
-  const pw = canvas.width / n, ph = canvas.height / n;
-  function drawCrosshair(i_f, j_f, color) {
-    const cx = (j_f + 0.5) * pw, cy = (i_f + 0.5) * ph;
-    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
-    const r = pw * 2;
-    ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); ctx.stroke();
-  }
-
-  drawCrosshair(data.best_i, data.best_j, '#fff');
-  if (highlight !== null) drawCrosshair(highlight.i_f, highlight.j_f, highlight.color || '#ffff00');
-}
-
-function renderHeatmaps() {
-  if (!FINE_GRIDS) return;
-  const keys = ACTIVE();
-  for (let i = 0; i < 2; i++) {
-    const key = keys[i];
-    const gd  = FINE_GRIDS[key];
-    drawHeatmap(`hm-${i}`, gd);
-    document.getElementById(`hm-${i}-label`).textContent = i === 0 ? 'WETTEST' : 'DRIEST';
-    updatePctEl(i, key, undefined);
-  }
-}
-
-function initHeatmap(idx) {
-  const canvasId = `hm-${idx}`;
-  const canvas   = document.getElementById(canvasId);
-
-  canvas.addEventListener('click', e => {
-    const key   = ACTIVE()[idx];
-    const data  = FINE_GRIDS[key];
-    const color = COLORS[idx];
-    const n     = data.grid.length;
-    const rect  = canvas.getBoundingClientRect();
-    const j = Math.floor((e.clientX - rect.left) / rect.width  * n);
-    const i = Math.floor((e.clientY - rect.top)  / rect.height * n);
-    if (i < 0 || i >= n || j < 0 || j >= n) return;
-
-    const tDeg = data.theta_center_deg + data.offsets_deg[i];
-    const pDeg = data.phi_center_deg   + data.offsets_deg[j];
-    const nVec = thetaPhiToNormal(tDeg, pDeg);
-    const frac = data.grid[i][j];
-    updatePctEl(idx, key, frac);
-    updatePctEl(1 - idx, ACTIVE()[1 - idx], undefined);
-
-    if (map.getSource('perturbed')) {
-      map.getSource('perturbed').setData({
-        type: 'FeatureCollection',
-        features: [{ type: 'Feature', properties: { color },
-                     geometry: { type: 'LineString', coordinates: gcCoords(nVec) } }]
-      });
-    }
-    drawHeatmap(canvasId, data, { i_f: i, j_f: j, color });
-    drawHeatmap(`hm-${1 - idx}`, FINE_GRIDS[ACTIVE()[1 - idx]], null);
-  });
-}
-
-let heatmapsInited = false;
-function initHeatmaps() {
-  if (!FINE_GRIDS) return;
-  renderHeatmaps();
-  if (!heatmapsInited) {
-    initHeatmap(0);
-    initHeatmap(1);
-    heatmapsInited = true;
-  }
-}
-
-// ── Summary rows ──────────────────────────────────────────────────────────────
-function renderSummaryRows() {
-  if (!BEST_FRACS) return;
-  document.getElementById('wet-pct').textContent = expFmt(WET(), BEST_FRACS[WET()]);
-  document.getElementById('dry-pct').textContent = expFmt(DRY(), BEST_FRACS[DRY()]);
-}
-
-
-function poleStr(tDeg, pDeg) {
-  const lat  = 90 - tDeg;
-  const latS = Math.abs(lat).toFixed(2) + (lat >= 0 ? '°N' : '°S');
-  const lonS = pDeg.toFixed(2) + '°E';
-  return `pole ${latS} ${lonS}`;
-}
-
-// ── Vector helpers ────────────────────────────────────────────────────────────
-const dot    = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
-const vscale = (v, s) => v.map(x => x * s);
-const vsub   = (a, b) => a.map((x, i) => x - b[i]);
-const vnorm  = v => { const m = Math.sqrt(dot(v, v)); return v.map(x => x / m); };
-const vcross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
-
-function latlonToCart(latDeg, lonDeg) {
-  const la = latDeg * Math.PI / 180, lo = lonDeg * Math.PI / 180;
+// Reveal vector helpers
+const dot    = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const vscale = (v,s) => v.map(x=>x*s);
+const vsub   = (a,b) => a.map((x,i)=>x-b[i]);
+const vnorm  = v => { const m=Math.sqrt(dot(v,v)); return v.map(x=>x/m); };
+const vcross = (a,b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+function latlonToCart(latDeg,lonDeg) {
+  const la=latDeg*Math.PI/180, lo=lonDeg*Math.PI/180;
   return [Math.cos(la)*Math.cos(lo), Math.cos(la)*Math.sin(lo), Math.sin(la)];
 }
-
-function thetaPhiToNormal(tDeg, pDeg) {
-  const t = tDeg * Math.PI / 180, p = pDeg * Math.PI / 180;
+function thetaPhiToNormal(tDeg,pDeg) {
+  const t=tDeg*Math.PI/180, p=pDeg*Math.PI/180;
   return [Math.sin(t)*Math.cos(p), Math.sin(t)*Math.sin(p), Math.cos(t)];
 }
-
 function normalToThetaPhi(n) {
-  let theta = Math.acos(Math.max(-1, Math.min(1, n[2]))) * 180 / Math.PI;
-  let phi   = Math.atan2(n[1], n[0]) * 180 / Math.PI;
-  if (phi < 0) phi += 360;
-  if (phi >= 180) { phi -= 180; theta = 180 - theta; }
-  return [theta, phi];
+  let theta=Math.acos(Math.max(-1,Math.min(1,n[2])))*180/Math.PI;
+  let phi=Math.atan2(n[1],n[0])*180/Math.PI;
+  if (phi<0) phi+=360; if (phi>=180) { phi-=180; theta=180-theta; }
+  return [theta,phi];
 }
-
-function perturbNormal(n0, p) {
-  const proj = vsub(n0, vscale(p, dot(n0, p)));
-  return dot(proj, proj) < 1e-12 ? null : vnorm(proj);
+function perturbNormal(n0,p) {
+  const proj=vsub(n0,vscale(p,dot(n0,p)));
+  return dot(proj,proj)<1e-12?null:vnorm(proj);
 }
-
-function gcCoords(n, nPts = 3600) {
-  const ref = Math.abs(n[0]) < 0.9 ? [1,0,0] : [0,1,0];
-  const u   = vnorm(vcross(n, ref));
-  const v   = vcross(n, u);
-  const raw = [];
-  for (let i = 0; i < nPts; i++) {
-    const t = 2 * Math.PI * i / nPts;
-    const px = Math.cos(t)*u[0] + Math.sin(t)*v[0];
-    const py = Math.cos(t)*u[1] + Math.sin(t)*v[1];
-    const pz = Math.cos(t)*u[2] + Math.sin(t)*v[2];
-    raw.push([Math.atan2(py, px) * 180 / Math.PI,
-              Math.asin(Math.max(-1, Math.min(1, pz))) * 180 / Math.PI]);
+function gcCoords(n,nPts=3600) {
+  const ref=Math.abs(n[0])<0.9?[1,0,0]:[0,1,0];
+  const u=vnorm(vcross(n,ref)), v=vcross(n,u);
+  const raw=[];
+  for (let i=0;i<nPts;i++) {
+    const t=2*Math.PI*i/nPts;
+    raw.push([Math.atan2(Math.cos(t)*u[1]+Math.sin(t)*v[1], Math.cos(t)*u[0]+Math.sin(t)*v[0])*180/Math.PI,
+              Math.asin(Math.max(-1,Math.min(1,Math.cos(t)*u[2]+Math.sin(t)*v[2])))*180/Math.PI]);
   }
   raw.push(raw[0]);
-  const out = [raw[0]];
-  for (let i = 1; i < raw.length; i++) {
-    let lon = raw[i][0];
-    const d = lon - out[out.length - 1][0];
-    if (d > 180) lon -= 360; else if (d < -180) lon += 360;
-    out.push([lon, raw[i][1]]);
+  const out=[raw[0]];
+  for (let i=1;i<raw.length;i++) {
+    let lon=raw[i][0]; const d=lon-out[out.length-1][0];
+    if (d>180) lon-=360; else if (d<-180) lon+=360;
+    out.push([lon,raw[i][1]]);
   }
   return out;
 }
-
-function gridCoords(gd, thetaDeg, phiDeg) {
-  const offs = gd.offsets_deg, n = offs.length;
-  const range = offs[n-1] - offs[0];
-  const i_f = (thetaDeg - gd.theta_center_deg - offs[0]) / range * (n - 1);
-  const j_f = (phiDeg   - gd.phi_center_deg   - offs[0]) / range * (n - 1);
-  if (i_f < 0 || i_f > n-1 || j_f < 0 || j_f > n-1) return null;
-  return { i_f, j_f };
+function gridCoords(gd,tDeg,pDeg) {
+  const o=gd.offsets_deg, n=o.length, r=o[n-1]-o[0];
+  const i_f=(tDeg-gd.theta_center_deg-o[0])/r*(n-1);
+  const j_f=(pDeg-gd.phi_center_deg  -o[0])/r*(n-1);
+  if (i_f<0||i_f>n-1||j_f<0||j_f>n-1) return null;
+  return {i_f,j_f};
+}
+function interpGrid(gd,tDeg,pDeg) {
+  const o=gd.offsets_deg, n=o.length, r=o[n-1]-o[0];
+  const i_f=(tDeg-gd.theta_center_deg-o[0])/r*(n-1);
+  const j_f=(pDeg-gd.phi_center_deg  -o[0])/r*(n-1);
+  if (i_f<0||i_f>n-1||j_f<0||j_f>n-1) return null;
+  const i0=Math.floor(i_f),j0=Math.floor(j_f),i1=Math.min(i0+1,n-1),j1=Math.min(j0+1,n-1);
+  const di=i_f-i0, dj=j_f-j0;
+  return gd.grid[i0][j0]*(1-di)*(1-dj)+gd.grid[i0][j1]*(1-di)*dj
+       + gd.grid[i1][j0]*di*(1-dj)    +gd.grid[i1][j1]*di*dj;
 }
 
-function interpGrid(gd, thetaDeg, phiDeg) {
-  const offs = gd.offsets_deg, n = offs.length;
-  const range = offs[n-1] - offs[0];
-  const i_f = (thetaDeg - gd.theta_center_deg - offs[0]) / range * (n - 1);
-  const j_f = (phiDeg   - gd.phi_center_deg   - offs[0]) / range * (n - 1);
-  if (i_f < 0 || i_f > n-1 || j_f < 0 || j_f > n-1) return null;
-  const i0 = Math.floor(i_f), j0 = Math.floor(j_f);
-  const i1 = Math.min(i0+1, n-1), j1 = Math.min(j0+1, n-1);
-  const di = i_f - i0, dj = j_f - j0;
-  return gd.grid[i0][j0]*(1-di)*(1-dj) + gd.grid[i0][j1]*(1-di)*dj
-       + gd.grid[i1][j0]*di*(1-dj)     + gd.grid[i1][j1]*di*dj;
-}
-
-// ── Style switcher ────────────────────────────────────────────────────────────
-const STYLES = [
-  { label: 'Satellite',         url: 'mapbox://styles/mapbox/satellite-v9' },
-  { label: 'Satellite + roads', url: 'mapbox://styles/mapbox/satellite-streets-v12' },
-  { label: 'Dark',              url: 'mapbox://styles/mapbox/dark-v11' },
-  { label: 'Outdoors',          url: 'mapbox://styles/mapbox/outdoors-v12' },
-  { label: 'Light',             url: 'mapbox://styles/mapbox/light-v11' },
-];
-const currentStyle = 'mapbox://styles/mapbox/light-v11';
-const sel = document.createElement('select');
-STYLES.forEach(s => {
-  const opt = document.createElement('option');
-  opt.value = s.url; opt.textContent = s.label;
-  if (s.url === currentStyle) opt.selected = true;
-  sel.appendChild(opt);
-});
-document.getElementById('style-switcher').appendChild(sel);
-
-
-let detailsEverOpened = false;
-document.getElementById('details-hdr').addEventListener('click', () => {
-  const body    = document.getElementById('details-body');
-  const chev    = document.querySelector('#details-hdr .sec-chevron');
-  const opening = body.classList.toggle('open');
-  chev.textContent = opening ? '▾' : '▸';
-  if (opening && !detailsEverOpened) {
-    detailsEverOpened = true;
-    document.querySelectorAll('#toggles input[type=checkbox]').forEach(chk => { chk.checked = true; });
-    coarseShow['wet-coarse'] = true;
-    coarseShow['dry-coarse'] = true;
-    if (dataReady && styleReady) applyCoarseVisibility();
+// ── Segment builders ──────────────────────────────────────────────────────────
+// Explorer/animation: input [{lat,lon},...], full cyan/red coloring
+function buildExplorerSegments(pts, displayStep, circleIdx) {
+  if (pts.length<2) return [];
+  const features=[]; let segStart=0, segLand=isLand(pts[0].lat,pts[0].lon);
+  const extra = (circleIdx != null) ? {circleIdx} : {};
+  function flush(endIdx) {
+    if (endIdx-segStart<1) return;
+    const coords=[];
+    for (let j=segStart;j<=endIdx;j+=displayStep) coords.push([pts[j].lon,pts[j].lat]);
+    if (coords[coords.length-1]!==pts[endIdx]) coords.push([pts[endIdx].lon,pts[endIdx].lat]);
+    const color=segLand?COLOR_LAND:COLOR_OCEAN;
+    for (const seg of splitAtAntimeridian(coords))
+      features.push({type:'Feature',geometry:{type:'LineString',coordinates:seg},properties:{color,...extra}});
   }
-  if (opening && dataReady && styleReady) {
-    loadAndApplyDetails();
-  } else if (styleReady) {
-    applyCoarseVisibility();
+  for (let i=1;i<pts.length;i++) {
+    const curr=isLand(pts[i].lat,pts[i].lon);
+    if (curr!==segLand) { flush(i); segStart=i; segLand=curr; }
   }
-});
-
-// ── Map ───────────────────────────────────────────────────────────────────────
-mapboxgl.accessToken = 'pk.eyJ1IjoiZGF2aWRnZWR5ZSIsImEiOiJjbWtvejk5bWkwYnBxM3JxNTE0ZjN6ZmowIn0.CaVScVkAo9uhpyebGqaQNg';
-const isMobile = window.matchMedia('(max-width: 640px)').matches;
-const _col = document.getElementById('right-col');
-const _initPad = isMobile
-  ? { top: 100, bottom: 0, left: 0, right: 0 }   // refined after paint
-  : { top: 0, bottom: 0, left: 0, right: (_col.offsetWidth || 240) + 20 };
-function initialZoom() {
-  const w = isMobile ? window.innerWidth : window.innerWidth - _initPad.right;
-  const h = isMobile ? window.innerHeight - _initPad.top : window.innerHeight;
-  const tighter = Math.min(w, h);
-  // Globe diameter ≈ 512 * 2^z / π; solve for 80% of tighter dimension
-  return Math.log2(0.8 * tighter * Math.PI / 512);
+  flush(pts.length-1); return features;
 }
-const map = new mapboxgl.Map({
-  container: 'map',
-  style: currentStyle,
-  projection: 'globe',
-  center: [129, 0],
-  zoom: initialZoom(),
-  attributionControl: false,
-});
-map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
-map.jumpTo({ center: [129, 0], zoom: initialZoom(), padding: _initPad });
-if (isMobile) requestAnimationFrame(() => {
-  const h = _col.offsetHeight;
-  if (h) map.easeTo({ padding: { top: h + 20, bottom: 0, left: 0, right: 0 }, duration: 0 });
-});
-map.addControl(new mapboxgl.NavigationControl(), 'top-left');
-map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200, unit: 'metric' }), 'bottom-left');
-
-// ── Perturbed circle & HUD ────────────────────────────────────────────────────
-const clickResult = document.getElementById('click-result');
-
-function clearPerturbed() {
-  if (map.getSource('perturbed'))
-    map.getSource('perturbed').setData({ type: 'FeatureCollection', features: [] });
-  clickResult.style.display = 'none';
-  if (FINE_GRIDS) {
-    const [k0, k1] = ACTIVE();
-    drawHeatmap('hm-0', FINE_GRIDS[k0], null);
-    drawHeatmap('hm-1', FINE_GRIDS[k1], null);
-    updatePctEl(0, k0, undefined);
-    updatePctEl(1, k1, undefined);
+// Reveal: input [[lon,lat],...], thickOnLand=true/false for muting, null=all bold
+function buildSegmentFeatures(pts, displayStep, thickOnLand) {
+  if (pts.length<2) return [];
+  const features=[]; let segStart=0, segLand=isLand(pts[0][1],pts[0][0]);
+  function flush(endIdx) {
+    if (endIdx-segStart<1) return;
+    const coords=[];
+    for (let j=segStart;j<=endIdx;j+=displayStep) coords.push(pts[j]);
+    if (coords[coords.length-1]!==pts[endIdx]) coords.push(pts[endIdx]);
+    let color, thick;
+    if (thickOnLand===null||thickOnLand===undefined) {
+      color=segLand?COLOR_SEG_LAND:COLOR_SEG_OCEAN; thick=true;
+    } else {
+      thick=thickOnLand?!!segLand:!segLand;
+      color=thick?(segLand?COLOR_SEG_LAND:COLOR_SEG_OCEAN):COLOR_SEG_MUTED;
+    }
+    for (const seg of splitAtAntimeridian(coords))
+      features.push({type:'Feature',geometry:{type:'LineString',coordinates:seg},properties:{color,thick}});
   }
+  for (let i=1;i<pts.length;i++) {
+    const curr=isLand(pts[i][1],pts[i][0]);
+    if (curr!==segLand) { flush(i); segStart=i; segLand=curr; }
+  }
+  flush(pts.length-1); return features;
 }
 
-map.on('click', e => {
-  if (e.originalEvent._handled) return;
-  if (!FINE_GRIDS) return;
-  const clickPt  = latlonToCart(e.lngLat.lat, e.lngLat.lng);
-  const features = [];
-  const parts    = [];
-  const hmHL     = {};
-  const fracs    = {};
-  const active   = ACTIVE();
+// ── Explorer stats ────────────────────────────────────────────────────────────
 
-  for (let si = 0; si < 2; si++) {
-    const key   = active[si];
-    const color = COLORS[si];
-    const gd    = FINE_GRIDS[key];
-    const bestTheta = gd.theta_center_deg + gd.offsets_deg[gd.best_i];
-    const bestPhi   = gd.phi_center_deg   + gd.offsets_deg[gd.best_j];
-    const n0  = thetaPhiToNormal(bestTheta, bestPhi);
-    const n1  = perturbNormal(n0, clickPt);
-    if (!n1) continue;
-    const [tn, pn] = normalToThetaPhi(n1);
-    const frac = interpGrid(gd, tn, pn);
-    if (frac === null) continue;
-    features.push({
-      type: 'Feature', properties: { color },
-      geometry: { type: 'LineString', coordinates: gcCoords(n1) }
+
+// ── Animation subsystem ───────────────────────────────────────────────────────
+function randomNormal() {
+  let x,y,z,r;
+  do { x=Math.random()*2-1; y=Math.random()*2-1; z=Math.random()*2-1; r=x*x+y*y+z*z; }
+  while (r>1||r<1e-10);
+  const s=1/Math.sqrt(r); return [x*s,y*s,z*s];
+}
+let spinPaused = false;
+function startSpinning() {
+  let last=null;
+  function step(ts) {
+    if (!spinPaused && last!==null) {
+      const lon=(map.getCenter().lng + (ts-last)*9/1000) % 360;
+      map.setCenter([lon, 0]);
+    }
+    if (spinPaused) last=null; else last=ts;
+    animRAF=requestAnimationFrame(step);
+  }
+  animRAF=requestAnimationFrame(step);
+}
+function stopSpinning() { if(animRAF){cancelAnimationFrame(animRAF);animRAF=null;} }
+
+function addAnimCircle() {
+  if (!maskReady||animCircleCount>=MAX_ANIM_CIRCLES) return;
+  const normal=randomNormal();
+  const allPts=sampleGC(normal,TRANSITION_PTS);
+  let landCount=0; for(const p of allPts) landCount+=isLand(p.lat,p.lon);
+  const oceanFrac=(1-landCount/allPts.length)*100;
+  const circleIdx = animCircleCount;
+  lastAnimPct         = fmtPct(oceanFrac);
+  animCircleData[circleIdx] = { pct: lastAnimPct, normal };
+  const step=Math.max(1,Math.round(TRANSITION_PTS/DISPLAY_PTS));
+  animFeatures.push(...buildExplorerSegments(allPts,step,circleIdx));
+  animCircleCount++;
+  if (map.getSource('anim-lines'))
+    map.getSource('anim-lines').setData({type:'FeatureCollection',features:animFeatures});
+  if (animCircleCount>=MAX_ANIM_CIRCLES) {
+    stopAnimInterval();
+    animDone = true;
+    if (appState === 'animation' && isMobile()) showCard('card-anim2');
+  }
+}
+function startAnimInterval() { addAnimCircle(); animInterval=setInterval(()=>{if(appState==='animation')addAnimCircle();},500); }
+function stopAnimInterval()  { if(animInterval){clearInterval(animInterval);animInterval=null;} }
+function clearAnimLines()    { animFeatures=[];animCircleCount=0;animCircleData=[]; if(map.getSource('anim-lines'))map.getSource('anim-lines').setData(emptyFC()); }
+
+// ── Explorer subsystem ────────────────────────────────────────────────────────
+// If land ≥ 50% report as land fraction, otherwise as ocean fraction.
+function fmtPct(oceanFrac) {
+  const landFrac = 100 - oceanFrac;
+  return landFrac >= 50
+    ? landFrac.toFixed(1) + '% land'
+    : oceanFrac.toFixed(1) + '% ocean';
+}
+
+function updateExpRecords(oceanFrac) {
+  if (bestWetFrac === null || oceanFrac > bestWetFrac) bestWetFrac = oceanFrac;
+  if (bestDryFrac === null || oceanFrac < bestDryFrac) bestDryFrac = oceanFrac;
+  document.getElementById('exp-wet-val').textContent = bestWetFrac.toFixed(2) + '% ocean';
+  document.getElementById('exp-dry-val').textContent = (100 - bestDryFrac).toFixed(2) + '% land';
+  document.getElementById('exp-records').classList.remove('dimmed');
+  updateRevealBtn();
+}
+function resetExpRecords() {
+  bestWetFrac = null; bestDryFrac = null;
+  document.getElementById('exp-wet-val').textContent = '–';
+  document.getElementById('exp-dry-val').textContent = '–';
+  document.getElementById('exp-records').classList.add('dimmed');
+}
+function updateRevealBtn() {
+  document.getElementById('reveal-btn').disabled = !(dataReady && bestWetFrac !== null);
+}
+function makeMarker(idx) {
+  const el=document.createElement('div');
+  el.style.cssText='color:#fff;font-size:24px;font-weight:bold;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000;cursor:grab;user-select:none;display:inline-block;width:fit-content;';
+  el.textContent='+';
+  const m=new mapboxgl.Marker({element:el,draggable:true,anchor:'center'});
+  let dragSaved=false;
+  m.on('drag',()=>{
+    if(!dragSaved){saveUndo();dragSaved=true;}
+    const ll=m.getLngLat(); explorerPoints[idx]={lat:ll.lat,lon:ll.lng};
+    if(explorerPoints[0]&&explorerPoints[1]) drawFast();
+  });
+  m.on('dragend',()=>{dragSaved=false; if(explorerPoints[0]&&explorerPoints[1])computeAndDraw();});
+  return m;
+}
+function placeMarker(idx,lat,lon) {
+  explorerPoints[idx]={lat,lon};
+  if (!explorerMarkers[idx]) { explorerMarkers[idx]=makeMarker(idx); explorerMarkers[idx].setLngLat([lon,lat]).addTo(map); }
+  else { explorerMarkers[idx].setLngLat([lon,lat]); }
+}
+function computeAndDraw() {
+  if (!maskReady) return;
+  const [A,B]=explorerPoints;
+  const n=gcNormal(A.lat,A.lon,B.lat,B.lon);
+  const allPts=sampleGC(n,TRANSITION_PTS);
+  let landCount=0; for(const p of allPts) landCount+=isLand(p.lat,p.lon);
+  const oceanFrac=(1-landCount/allPts.length)*100;
+  updateExpRecords(oceanFrac);
+  const step=Math.max(1,Math.round(TRANSITION_PTS/DISPLAY_PTS));
+  map.getSource('gc-line').setData({type:'FeatureCollection',features:buildExplorerSegments(allPts,step)});
+}
+function drawFast() {
+  const [A,B]=explorerPoints; if(!A||!B) return;
+  const allPts=sampleGC(gcNormal(A.lat,A.lon,B.lat,B.lon),TRANSITION_PTS);
+  const pts=subsample(allPts,DISPLAY_PTS);
+  map.getSource('gc-line').setData({type:'FeatureCollection',
+    features:splitAtAntimeridian(pts.map(p=>[p.lon,p.lat])).map(s=>({type:'Feature',geometry:{type:'LineString',coordinates:s},properties:{color:COLOR_DRAG}}))});
+}
+function clearExplorer() {
+  if(map.getSource('gc-line')) map.getSource('gc-line').setData(emptyFC());
+  explorerPoints=[null,null];
+  explorerMarkers.forEach(m=>m&&m.remove()); explorerMarkers=[null,null];
+  explorerClickCount=0;
+}
+function saveUndo() { undoStack.push(explorerPoints.map(p=>p?{...p}:null)); }
+function restoreUndo(snap) {
+  explorerPoints=[null,null]; explorerMarkers.forEach(m=>m&&m.remove()); explorerMarkers=[null,null]; explorerClickCount=0;
+  if(map.getSource('gc-line')) map.getSource('gc-line').setData(emptyFC());
+  snap.forEach((p,i)=>{if(p){placeMarker(i,p.lat,p.lon);explorerClickCount++;}});
+  if(explorerPoints[0]&&explorerPoints[1]) computeAndDraw();
+}
+const PAPER_OCEAN={A:{lat:25+17/60,lon:66+40/60},B:{lat:58+37/60,lon:162+14/60},label:'Longest sailable line — Chabukswar & Mukherjee (2018) — 32,090 km'};
+const PAPER_LAND ={A:{lat:24+33/60,lon:118+38/60},B:{lat:37+2/60,lon:-(8+55/60)},label:'Longest drivable line — Chabukswar & Mukherjee (2018) — 11,241 km'};
+function loadPaperLine(line) {
+  saveUndo(); clearExplorer();
+  placeMarker(0,line.A.lat,line.A.lon); placeMarker(1,line.B.lat,line.B.lon); explorerClickCount=2;
+  computeAndDraw();
+}
+
+// ── Reveal subsystem ──────────────────────────────────────────────────────────
+const WET=()=>'wettest', DRY=()=>'driest', ACTIVE=()=>[WET(),DRY()];
+const expFmt=(key,frac)=>INVERT[key]?((1-frac)*100).toFixed(2)+'% land':(frac*100).toFixed(2)+'% ocean';
+const pctFmt=(key,frac)=>((INVERT[key]?(1-frac):frac)*100).toFixed(2)+'%';
+
+function showRevealedCircles() {
+  if (!styleReady) return;
+  if(map.getLayer('fine-segments')) map.setLayoutProperty('fine-segments','visibility','visible');
+  if(map.getLayer('poles'))         map.setLayoutProperty('poles','visibility','visible');
+  if (maskReady&&dataReady) refreshFineSegments();
+  if (BEST_FRACS) {
+    document.getElementById('rev-wet-pct').textContent=expFmt(WET(),BEST_FRACS[WET()]);
+    document.getElementById('rev-dry-pct').textContent=expFmt(DRY(),BEST_FRACS[DRY()]);
+  }
+}
+
+function refreshFineSegments() {
+  if (!mask||!DATA||!map.getSource('fine-segments')) return;
+  const features=[], step=Math.max(1,Math.round(TRANSITION_PTS/3600));
+  ACTIVE().forEach(key=>{
+    const fc=DATA[key+'-fine'];
+    if (!fc||!fc.features||!fc.features.length) return;
+    const {theta,phi}=fc.features[0].properties||{};
+    if (theta==null) return;
+    const nVec=thetaPhiToNormal(theta,phi);
+    const ref=Math.abs(nVec[0])<0.9?[1,0,0]:[0,1,0];
+    const u=vnorm(vcross(nVec,ref)), v=vcross(nVec,u);
+    const pts=[];
+    for (let i=0;i<TRANSITION_PTS;i++) {
+      const t=2*Math.PI*i/TRANSITION_PTS;
+      pts.push([Math.atan2(Math.cos(t)*u[1]+Math.sin(t)*v[1],Math.cos(t)*u[0]+Math.sin(t)*v[0])*180/Math.PI,
+                Math.asin(Math.max(-1,Math.min(1,Math.cos(t)*u[2]+Math.sin(t)*v[2])))*180/Math.PI]);
+    }
+    features.push(...buildSegmentFeatures(pts,step,key===DRY()));
+  });
+  map.getSource('fine-segments').setData({type:'FeatureCollection',features});
+  ACTIVE().forEach(id=>{if(map.getLayer(id+'-fine'))map.setLayoutProperty(id+'-fine','visibility','none');});
+}
+
+function refreshCoarseSegments() {
+  if (!mask||!DATA) return;
+  const step=Math.max(1,Math.round(COARSE_TRANSITION_PTS/360));
+  ['wet','dry'].forEach(side=>{
+    const src=map.getSource('coarse-segments-'+side); if(!src) return;
+    const key=side==='wet'?WET():DRY();
+    const fc=DATA[key+'-coarse']; if(!fc||!fc.features) return;
+    const features=[];
+    fc.features.forEach((f,fi)=>{
+      const{theta,phi,ocean_pct}=f.properties||{}; if(theta==null) return;
+      const nVec=thetaPhiToNormal(theta,phi);
+      const ref=Math.abs(nVec[0])<0.9?[1,0,0]:[0,1,0];
+      const u=vnorm(vcross(nVec,ref)), v=vcross(nVec,u);
+      const pts=[];
+      for(let i=0;i<COARSE_TRANSITION_PTS;i++) {
+        const t=2*Math.PI*i/COARSE_TRANSITION_PTS;
+        pts.push([Math.atan2(Math.cos(t)*u[1]+Math.sin(t)*v[1],Math.cos(t)*u[0]+Math.sin(t)*v[0])*180/Math.PI,
+                  Math.asin(Math.max(-1,Math.min(1,Math.cos(t)*u[2]+Math.sin(t)*v[2])))*180/Math.PI]);
+      }
+      const segs=buildSegmentFeatures(pts,step,side==='dry');
+      segs.forEach(s=>Object.assign(s.properties,{rank:fi+1,ocean_pct}));
+      features.push(...segs);
     });
-    parts.push(expFmt(key, frac));
-    fracs[si] = frac;
-    const pos = gridCoords(gd, tn, pn);
-    if (pos) hmHL[si] = { ...pos, color };
-  }
-
-  if (features.length === 0) { clearPerturbed(); return; }
-  map.getSource('perturbed').setData({ type: 'FeatureCollection', features });
-  clickResult.textContent = parts.join('  ·  ');
-  clickResult.style.display = 'block';
-  const [k0, k1] = ACTIVE();
-  drawHeatmap('hm-0', FINE_GRIDS[k0], hmHL[0] || null);
-  drawHeatmap('hm-1', FINE_GRIDS[k1], hmHL[1] || null);
-  updatePctEl(0, k0, fracs[0]);
-  updatePctEl(1, k1, fracs[1]);
-});
-
-document.addEventListener('keydown', e => { if (e.key === 'Escape') clearPerturbed(); });
-
-// ── North-up control ──────────────────────────────────────────────────────────
-class NorthUpControl {
-  onAdd(map) {
-    this._map = map;
-    this._container = document.createElement('div');
-    this._container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
-    const btn = document.createElement('button');
-    btn.title = 'Reset to north-up, no tilt';
-    btn.style.cssText = 'font-size:18px;font-weight:bold;width:30px;height:30px;cursor:pointer;background:rgba(255,255,255,0.9);border:none;';
-    btn.textContent = '⬆';
-    btn.addEventListener('click', () => map.easeTo({ bearing: 0, pitch: 0, duration: 300 }));
-    this._container.appendChild(btn);
-    return this._container;
-  }
-  onRemove() { this._container.parentNode.removeChild(this._container); }
+    src.setData({type:'FeatureCollection',features});
+  });
+  coarseSegmentsBuilt=true; applyCoarseVisibility();
 }
-
-// ── Map layer setup ───────────────────────────────────────────────────────────
-let togglesBuilt = false;
-
-// Coarse visibility state — keyed by concept, not by experiment
-const coarseShow = { 'wet-coarse': false, 'dry-coarse': false };
-
 
 function applyCoarseVisibility() {
-  const detailsOpen = document.getElementById('details-body').classList.contains('open');
-  const [wetKey, dryKey] = ACTIVE();
-  const wetVis = detailsOpen && coarseShow['wet-coarse'];
-  const dryVis = detailsOpen && coarseShow['dry-coarse'];
-  const setVis = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
+  const open=appState==='detailed';
+  const setVis=(id,on)=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility',on?'visible':'none');};
   if (coarseSegmentsBuilt) {
-    setVis('coarse-segments-wet', wetVis);
-    setVis('coarse-segments-dry', dryVis);
-    LAYERS.filter(l => !l.id.endsWith('-fine')).forEach(l => {
-      if (map.getLayer(l.id)) map.setLayoutProperty(l.id, 'visibility', 'none');
-    });
-  } else {
-    const shouldShow = { [wetKey + '-coarse']: wetVis, [dryKey + '-coarse']: dryVis };
-    LAYERS.filter(l => !l.id.endsWith('-fine')).forEach(l => {
-      if (!map.getLayer(l.id)) return;
-      map.setLayoutProperty(l.id, 'visibility', shouldShow[l.id] ? 'visible' : 'none');
+    setVis('coarse-segments-wet', open&&coarseShow['wet-coarse']);
+    setVis('coarse-segments-dry', open&&coarseShow['dry-coarse']);
+    if (LAYERS) LAYERS.filter(l=>!l.id.endsWith('-fine')).forEach(l=>{if(map.getLayer(l.id))map.setLayoutProperty(l.id,'visibility','none');});
+  } else if (LAYERS) {
+    const shouldShow={[WET()+'-coarse']:open&&coarseShow['wet-coarse'],[DRY()+'-coarse']:open&&coarseShow['dry-coarse']};
+    LAYERS.filter(l=>!l.id.endsWith('-fine')).forEach(l=>{
+      if(!map.getLayer(l.id))return;
+      map.setLayoutProperty(l.id,'visibility',shouldShow[l.id]?'visible':'none');
     });
   }
-}
-
-function renderActiveLayers() {
-  const active = ACTIVE();
-  LAYERS.filter(l => l.id.endsWith('-fine')).forEach(l => {
-    if (!map.getLayer(l.id)) return;
-    const idx = active.indexOf(l.id.replace('-fine', ''));
-    if (idx === -1) {
-      map.setLayoutProperty(l.id, 'visibility', 'none');
-    } else {
-      map.setLayoutProperty(l.id, 'visibility', 'visible');
-      map.setPaintProperty(l.id, 'line-color', COLORS[idx]);
-    }
-  });
 }
 
 function renderPoleMarkers() {
-  if (!map.getSource('poles') || !FINE_GRIDS) return;
-  const features = [];
-  ACTIVE().forEach((key, i) => {
-    const color = COLORS[i];
-    const gd    = FINE_GRIDS[key];
-    const tDeg  = gd.theta_center_deg + gd.offsets_deg[gd.best_i];
-    const pDeg  = gd.phi_center_deg   + gd.offsets_deg[gd.best_j];
-    const lat   = 90 - tDeg;
-    const label = i === 0 ? 'Wettest' : 'Driest';
-    for (const [lon, la] of [[pDeg, lat], [pDeg - 180, -lat]]) {
-      features.push({
-        type: 'Feature',
-        properties: { color, key, label },
-        geometry: { type: 'Point', coordinates: [lon, la] }
-      });
-    }
+  if (!map.getSource('poles')||!FINE_GRIDS) return;
+  const features=[];
+  ACTIVE().forEach((key,i)=>{
+    const gd=FINE_GRIDS[key], color=COLORS[i];
+    const tDeg=gd.theta_center_deg+gd.offsets_deg[gd.best_i];
+    const pDeg=gd.phi_center_deg +gd.offsets_deg[gd.best_j];
+    const lat=90-tDeg, label=i===0?'Wettest':'Driest';
+    for (const [lon,la] of [[pDeg,lat],[pDeg-180,-lat]])
+      features.push({type:'Feature',properties:{color,key,label},geometry:{type:'Point',coordinates:[lon,la]}});
   });
-  map.getSource('poles').setData({ type: 'FeatureCollection', features });
+  map.getSource('poles').setData({type:'FeatureCollection',features});
 }
 
-function setupMapLayers() {
-  map.setFog({});
-  sel.addEventListener('change', () => map.setStyle(sel.value));
-
-  const active = ACTIVE();
-  LAYERS.forEach(l => {
-    map.addSource(l.id, { type: 'geojson', data: DATA[l.id] });
-    const paint = { 'line-color': l.color, 'line-width': l.width, 'line-opacity': l.opacity };
-    if (l.dashed) paint['line-dasharray'] = [5, 4];
-    const chk = document.getElementById(`chk-${l.id}`);
-    const vis = l.id.endsWith('-fine')
-      ? (active.includes(l.id.replace('-fine', '')) ? 'visible' : 'none')
-      : (chk ? (chk.checked ? 'visible' : 'none') : (l.visible ? 'visible' : 'none'));
-    map.addLayer({
-      id: l.id, type: 'line', source: l.id, paint,
-      layout: { 'line-cap': l.dashed ? 'butt' : 'round', 'line-join': 'round', 'visibility': vis },
-    });
-  });
-  renderActiveLayers();
-
-  // Pole markers
-  if (FINE_GRIDS) {
-    map.addSource('poles', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    map.addLayer({
-      id: 'poles', type: 'symbol', source: 'poles',
-      layout: {
-        'text-field': '+', 'text-size': 24,
-        'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
-        'text-allow-overlap': true, 'text-ignore-placement': true,
-      },
-      paint: {
-        'text-color': ['get', 'color'],
-        'text-halo-color': 'rgba(0,0,0,0.7)', 'text-halo-width': 1.5,
-      }
-    });
-    renderPoleMarkers();
-
-    map.on('click', 'poles', e => {
-      e.originalEvent._handled = true;
-      const p   = e.features[0].properties;
-      const [lon, lat] = e.features[0].geometry.coordinates;
-      const gd  = FINE_GRIDS[p.key];
-      const latS = Math.abs(lat).toFixed(2) + (lat >= 0 ? '°N' : '°S');
-      const lonS = Math.abs(lon).toFixed(2) + (lon >= 0 ? '°E' : '°W');
-      clickResult.textContent =
-        `${p.label} pole  ·  ${expFmt(p.key, gd.best_frac)}  ·  ${latS} ${lonS}  ·  axis point equidistant from every point on the circle`;
-      clickResult.style.display = 'block';
-    });
-    map.on('mousemove',  'poles', () => { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', 'poles', () => { map.getCanvas().style.cursor = ''; });
-  }
-
-  // Perturbed circle
-  map.addSource('perturbed', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-  map.addLayer({
-    id: 'perturbed', type: 'line', source: 'perturbed',
-    paint: { 'line-color': ['get', 'color'], 'line-width': 2.5, 'line-opacity': 0.9, 'line-dasharray': [6, 4] },
-    layout: { 'line-cap': 'butt', 'line-join': 'round' }
-  });
-
-  // Fine circles colored by land/ocean using binary mask
-  map.addSource('fine-segments', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-  map.addLayer({
-    id: 'fine-segments', type: 'line', source: 'fine-segments',
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: {
-      'line-color': ['get', 'color'],
-      'line-width': ['interpolate', ['exponential', 2], ['zoom'],
-        0,  ['case', ['==', ['get', 'thick'], true], 2.5, 0.8],
-        5,  ['case', ['==', ['get', 'thick'], true], 4,   1.5],
-        10, ['case', ['==', ['get', 'thick'], true], 10,  4  ],
-      ],
-      'line-opacity': 0.9,
-    }
-  });
-  if (mask) refreshFineSegments();
-
-  // Coarse circles colored by land/ocean (built lazily when details panel opens)
-  ['wet', 'dry'].forEach(side => {
-    map.addSource(`coarse-segments-${side}`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    map.addLayer({
-      id: `coarse-segments-${side}`, type: 'line', source: `coarse-segments-${side}`,
-      layout: { 'line-cap': 'round', 'line-join': 'round', 'visibility': 'none' },
-      paint: {
-        'line-color': ['get', 'color'],
-        'line-width': ['interpolate', ['exponential', 2], ['zoom'],
-          0,  ['case', ['==', ['get', 'thick'], true], 1,   0.5],
-          5,  ['case', ['==', ['get', 'thick'], true], 1.5, 0.8],
-          10, ['case', ['==', ['get', 'thick'], true], 4,   2  ],
-        ],
-        'line-opacity': 0.65,
-      }
-    });
-  });
-  if (mask && coarseSegmentsBuilt) refreshCoarseSegments();
-
-  ['wet', 'dry'].forEach(side => {
-    map.on('click', `coarse-segments-${side}`, e => {
-      e.originalEvent._handled = true;
-      const p = e.features[0].properties;
-      clickResult.textContent = `Candidate #${p.rank}, ${p.ocean_pct}`;
-      clickResult.style.display = 'block';
-    });
-    map.on('mousemove',  `coarse-segments-${side}`, () => { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', `coarse-segments-${side}`, () => { map.getCanvas().style.cursor = ''; });
-  });
-
-  // Hover tooltip
-  const tip = document.getElementById('tooltip');
-  LAYERS.forEach(l => {
-    map.on('mousemove', l.id, e => {
-      const p = e.features[0].properties;
-      tip.textContent = `${p.label}  ·  ${p.ocean_pct}  ·  ${poleStr(p.theta, p.phi)}`;
-      tip.classList.add('on');
-      map.getCanvas().style.cursor = 'crosshair';
-    });
-    map.on('mouseleave', l.id, () => {
-      tip.classList.remove('on');
-      map.getCanvas().style.cursor = '';
-    });
-  });
-
-  // Layer toggles — 4 concept rows, experiment-agnostic, built once
-  if (!togglesBuilt) {
-    const container = document.getElementById('toggles');
-    [
-      { concept: 'wet-coarse', label: 'Wettest 10 (coarse)', color: '#1565c0', h: 2 },
-      { concept: 'dry-coarse', label: 'Driest 10 (coarse)',  color: '#7f0000', h: 2 },
-    ].forEach(({ concept, label, color, h }) => {
-      const div = document.createElement('div');
-      div.className = 'row';
-      const chk = document.createElement('input');
-      chk.type = 'checkbox';
-      const swatch = document.createElement('div');
-      swatch.className = 'swatch';
-      swatch.style.cssText = `background:${color};--c:${color};height:${h}px`;
-      const lbl = document.createElement('label');
-      lbl.textContent = label;
-      div.appendChild(chk);
-      div.appendChild(swatch);
-      div.appendChild(lbl);
-      chk.addEventListener('change', ev => {
-        coarseShow[concept] = ev.target.checked;
-        applyCoarseVisibility();
-      });
-      container.appendChild(div);
-    });
-    togglesBuilt = true;
-  }
-  applyCoarseVisibility();
+// ── Details subsystem ─────────────────────────────────────────────────────────
+function heatColor(t) {
+  return [Math.round(255*(1-t)*(t<0.5?1:2*(1-t))),
+          Math.round(255*Math.min(2*t,2*(1-t))*0.5),
+          Math.round(255*t*(t>0.5?1:2*t))];
 }
-
-// ── Boot ──────────────────────────────────────────────────────────────────────
-let styleReady = false, dataReady = false;
-
-map.on('style.load', () => {
-  styleReady = true;
-  if (dataReady) {
-    setupMapLayers();
-    if (document.getElementById('details-body').classList.contains('open')) loadAndApplyDetails();
+function drawHeatmap(canvasId,data,highlight=null) {
+  const canvas=document.getElementById(canvasId); if(!canvas) return;
+  const ctx=canvas.getContext('2d'); const n=data.grid.length;
+  let min=Infinity, max=-Infinity;
+  data.grid.forEach(row=>row.forEach(v=>{min=Math.min(min,v);max=Math.max(max,v);}));
+  const range=max-min||1;
+  const off=document.createElement('canvas'); off.width=n; off.height=n;
+  const octx=off.getContext('2d'); const img=octx.createImageData(n,n);
+  for (let i=0;i<n;i++) for(let j=0;j<n;j++) {
+    const t=(data.grid[i][j]-min)/range, c=heatColor(t), idx=(i*n+j)*4;
+    img.data[idx]=c[0];img.data[idx+1]=c[1];img.data[idx+2]=c[2];img.data[idx+3]=255;
   }
-});
+  octx.putImageData(img,0,0);
+  ctx.imageSmoothingEnabled=false; ctx.drawImage(off,0,0,canvas.width,canvas.height);
+  const pw=canvas.width/n, ph=canvas.height/n;
+  function drawCH(i_f,j_f,color) {
+    const cx=(j_f+0.5)*pw, cy=(i_f+0.5)*ph, r=pw*2;
+    ctx.strokeStyle=color; ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(cx-r,cy);ctx.lineTo(cx+r,cy);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx,cy-r);ctx.lineTo(cx,cy+r);ctx.stroke();
+  }
+  drawCH(data.best_i,data.best_j,'#fff');
+  if (highlight!==null) drawCH(highlight.i_f,highlight.j_f,highlight.color||'#ffff00');
+}
+function updatePctEl(idx,key,perturbedFrac) {
+  const el=document.getElementById('hm-'+idx+'-pct'); if(!el||!FINE_GRIDS) return;
+  const best=pctFmt(key,FINE_GRIDS[key].best_frac);
+  el.innerHTML=perturbedFrac!==undefined
+    ?`<span style="color:#fff">${best}</span>&ensp;<span style="color:${COLORS[idx]}">${pctFmt(key,perturbedFrac)}</span>`
+    :`<span style="color:#fff">${best}</span>`;
+}
+function renderHeatmaps() {
+  if (!FINE_GRIDS) return;
+  ACTIVE().forEach((key,i)=>{
+    drawHeatmap('hm-'+i,FINE_GRIDS[key]);
+    document.getElementById('hm-'+i+'-label').textContent=i===0?'WETTEST':'DRIEST';
+    updatePctEl(i,key,undefined);
+  });
+}
+function initHeatmap(idx) {
+  const canvas=document.getElementById('hm-'+idx); if(!canvas) return;
+  canvas.addEventListener('click',e=>{
+    const key=ACTIVE()[idx], data=FINE_GRIDS[key], color=COLORS[idx], n=data.grid.length;
+    const rect=canvas.getBoundingClientRect();
+    const j=Math.floor((e.clientX-rect.left)/rect.width*n);
+    const i=Math.floor((e.clientY-rect.top)/rect.height*n);
+    if (i<0||i>=n||j<0||j>=n) return;
+    const nVec=thetaPhiToNormal(data.theta_center_deg+data.offsets_deg[i],data.phi_center_deg+data.offsets_deg[j]);
+    updatePctEl(idx,key,data.grid[i][j]); updatePctEl(1-idx,ACTIVE()[1-idx],undefined);
+    if (map.getSource('perturbed'))
+      map.getSource('perturbed').setData({type:'FeatureCollection',
+        features:[{type:'Feature',properties:{color},geometry:{type:'LineString',coordinates:gcCoords(nVec)}}]});
+    drawHeatmap('hm-'+idx,data,{i_f:i,j_f:j,color});
+    drawHeatmap('hm-'+(1-idx),FINE_GRIDS[ACTIVE()[1-idx]],null);
+  });
+}
+function initHeatmaps() {
+  if (!FINE_GRIDS) return;
+  renderHeatmaps();
+  if (!heatmapsInited) { initHeatmap(0); initHeatmap(1); heatmapsInited=true; }
+}
+function buildToggles() {
+  if (togglesBuilt) return;
+  const container=document.getElementById('toggles');
+  [{concept:'wet-coarse',label:'Wettest 10 (coarse)',color:'#1565c0'},
+   {concept:'dry-coarse',label:'Driest 10 (coarse)', color:'#7f0000'}].forEach(({concept,label,color})=>{
+    const div=document.createElement('div'); div.className='tog-row';
+    const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=true;
+    const sw=document.createElement('div'); sw.className='tog-swatch'; sw.style.background=color;
+    const lbl=document.createElement('label'); lbl.textContent=label;
+    chk.addEventListener('change',ev=>{coarseShow[concept]=ev.target.checked; applyCoarseVisibility();});
+    div.appendChild(chk); div.appendChild(sw); div.appendChild(lbl);
+    container.appendChild(div);
+  });
+  togglesBuilt=true;
+}
 
 function regenCircleCoords(data) {
-  // Replace stored coordinates with client-generated high-density ones.
-  // theta/phi are stored in each feature's properties.
-  Object.values(data).forEach(fc => {
-    if (!fc || !fc.features) return;
-    fc.features.forEach(f => {
-      const { theta, phi } = f.properties || {};
-      if (theta == null || phi == null) return;
-      f.geometry.coordinates = gcCoords(thetaPhiToNormal(theta, phi));
+  Object.values(data).forEach(fc=>{
+    if (!fc||!fc.features) return;
+    fc.features.forEach(f=>{
+      const{theta,phi}=f.properties||{}; if(theta==null) return;
+      f.geometry.coordinates=gcCoords(thetaPhiToNormal(theta,phi));
     });
   });
 }
-
-function applyDataset(d) {
-  DATA       = d.layers;
-  LAYERS     = d.layer_meta;
-  BEST_FRACS = d.best_fracs || null;
-  FINE_GRIDS = null;
-  regenCircleCoords(DATA);
-}
-
-let detailsData = null;
-
-function applyDetails(d) {
-  FINE_GRIDS = d.fine_grids || null;
-}
-
+function applyDataset(d) { DATA=d.layers; LAYERS=d.layer_meta; BEST_FRACS=d.best_fracs||null; FINE_GRIDS=null; regenCircleCoords(DATA); }
+function applyDetails(d) { FINE_GRIDS=d.fine_grids||null; }
 function ensureDetails() {
   if (detailsData) return Promise.resolve(detailsData);
-  return fetch(DETAILS_URL).then(r => r.json()).then(d => { detailsData = d; return d; });
+  return fetch(DETAILS_URL).then(r=>r.json()).then(d=>{detailsData=d;return d;});
+}
+function loadAndApplyDetails() {
+  buildToggles();
+  ensureDetails().then(d=>{ applyDetails(d); initHeatmaps(); renderPoleMarkers(); if(mask)refreshCoarseSegments(); });
 }
 
-function loadAndApplyDetails() {
-  ensureDetails().then(d => {
-    applyDetails(d);
-    initHeatmaps();
-    renderPoleMarkers();
-    if (mask) refreshCoarseSegments();
+// ── Grid (zoom ≥ 8) ───────────────────────────────────────────────────────────
+function updateGrid() {
+  if (!map.getSource('grid')) return;
+  if (map.getZoom()<8) { map.getSource('grid').setData(emptyFC()); map.getSource('grid-fill').setData(emptyFC()); return; }
+  const b=map.getBounds(), step=1/60;
+  const minLon=Math.floor(b.getWest()/step)*step, maxLon=Math.ceil(b.getEast()/step)*step;
+  const minLat=Math.floor(b.getSouth()/step)*step, maxLat=Math.ceil(b.getNorth()/step)*step;
+  const lines=[];
+  for(let lon=minLon;lon<=maxLon;lon+=step) lines.push({type:'Feature',geometry:{type:'LineString',coordinates:[[lon,minLat],[lon,maxLat]]},properties:{}});
+  for(let lat=minLat;lat<=maxLat;lat+=step) lines.push({type:'Feature',geometry:{type:'LineString',coordinates:[[minLon,lat],[maxLon,lat]]},properties:{}});
+  map.getSource('grid').setData({type:'FeatureCollection',features:lines});
+  if (maskReady) {
+    const fills=[];
+    for(let lon=minLon;lon<maxLon;lon+=step) for(let lat=minLat;lat<maxLat;lat+=step) {
+      fills.push({type:'Feature',geometry:{type:'Polygon',coordinates:[[[lon,lat],[lon+step,lat],[lon+step,lat+step],[lon,lat+step],[lon,lat]]]},
+        properties:{color:isLand(lat+step*0.5,lon+step*0.5)?'#c8a96e':'#5bb8d4'}});
+    }
+    map.getSource('grid-fill').setData({type:'FeatureCollection',features:fills});
+  } else { map.getSource('grid-fill').setData(emptyFC()); }
+}
+
+// ── Map layer setup ───────────────────────────────────────────────────────────
+function setupAllLayers() {
+  map.setFog({color:'#000','high-color':'#000','horizon-blend':0.02});
+
+  // grid fill + lines
+  map.addSource('grid-fill',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'grid-fill',type:'fill',source:'grid-fill',paint:{'fill-color':['get','color'],'fill-opacity':['interpolate',['linear'],['zoom'],8,0,9,0.3]}});
+  map.addSource('grid',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'grid',type:'line',source:'grid',paint:{'line-color':'#000','line-width':0.5,'line-opacity':['interpolate',['linear'],['zoom'],8,0,9,0.35]}});
+
+  // animation circles
+  map.addSource('anim-lines',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'anim-lines',type:'line',source:'anim-lines',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':['get','color'],'line-width':2.5,'line-opacity':0.7}});
+
+  // selected circle in examine mode (2× thickness of anim-lines)
+  map.addSource('selected-circle',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'selected-line',type:'line',source:'selected-circle',layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':['get','color'],'line-width':5,'line-opacity':1.0}});
+
+  // explorer: main + highlight
+  map.addSource('gc-line',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'gc-line',type:'line',source:'gc-line',layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':['get','color'],'line-width':['interpolate',['exponential',2],['zoom'],0,1.5,5,2.5,10,7],'line-opacity':0.88}});
+  // coarse segments (details mode)
+  ['wet','dry'].forEach(side=>{
+    map.addSource('coarse-segments-'+side,{type:'geojson',data:emptyFC()});
+    map.addLayer({id:'coarse-segments-'+side,type:'line',source:'coarse-segments-'+side,
+      layout:{'line-cap':'round','line-join':'round','visibility':'none'},
+      paint:{'line-color':['get','color'],
+        'line-width':['interpolate',['exponential',2],['zoom'],0,['case',['==',['get','thick'],true],1,0.5],5,['case',['==',['get','thick'],true],1.5,0.8],10,['case',['==',['get','thick'],true],4,2]],
+        'line-opacity':0.65}});
+  });
+
+  // fine segments (reveal)
+  map.addSource('fine-segments',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'fine-segments',type:'line',source:'fine-segments',layout:{'line-cap':'round','line-join':'round','visibility':'none'},
+    paint:{'line-color':['get','color'],
+      'line-width':['interpolate',['exponential',2],['zoom'],0,['case',['==',['get','thick'],true],2.5,0.8],5,['case',['==',['get','thick'],true],4,1.5],10,['case',['==',['get','thick'],true],10,4]],
+      'line-opacity':0.9}});
+
+  // perturbed (details heatmap click)
+  map.addSource('perturbed',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'perturbed',type:'line',source:'perturbed',layout:{'line-cap':'butt','line-join':'round'},
+    paint:{'line-color':['get','color'],'line-width':2.5,'line-opacity':0.9,'line-dasharray':[6,4]}});
+
+  // poles (symbol markers)
+  map.addSource('poles',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'poles',type:'symbol',source:'poles',layout:{
+    'text-field':'+','text-size':24,'text-font':['DIN Offc Pro Bold','Arial Unicode MS Bold'],
+    'text-allow-overlap':true,'text-ignore-placement':true,'visibility':'none'},
+    paint:{'text-color':['get','color'],'text-halo-color':'rgba(0,0,0,0.7)','text-halo-width':1.5}});
+
+  // monochrome fine/coarse layers from visuals JSON (added if data already ready)
+  addLayerSources();
+
+  // Layer event handlers
+  map.on('click','poles',e=>{
+    e.originalEvent._handled=true;
+    const p=e.features[0].properties, [lon,lat]=e.features[0].geometry.coordinates;
+    const gd=FINE_GRIDS&&FINE_GRIDS[p.key];
+    const latS=Math.abs(lat).toFixed(2)+(lat>=0?'°N':'°S');
+    const lonS=Math.abs(lon).toFixed(2)+(lon>=0?'°E':'°W');
+    const cr=document.getElementById('click-result');
+    cr.textContent=`${p.label} pole  ·  ${gd?expFmt(p.key,gd.best_frac):''}  ·  ${latS} ${lonS}`;
+    cr.style.display='block';
+  });
+  map.on('mousemove','poles',()=>{map.getCanvas().style.cursor='pointer';});
+  map.on('mouseleave','poles',()=>{map.getCanvas().style.cursor=appState==='explorer'?'crosshair':'';});
+  ['wet','dry'].forEach(side=>{
+    map.on('click','coarse-segments-'+side,e=>{
+      e.originalEvent._handled=true;
+      const p=e.features[0].properties;
+      const cr=document.getElementById('click-result');
+      cr.textContent='Candidate #'+p.rank+', '+p.ocean_pct; cr.style.display='block';
+    });
+    map.on('mousemove','coarse-segments-'+side,()=>{map.getCanvas().style.cursor='pointer';});
+    map.on('mouseleave','coarse-segments-'+side,()=>{map.getCanvas().style.cursor='';});
+  });
+
+  reapplyCurrentState();
+  updateGrid();
+}
+
+// ── Map init ──────────────────────────────────────────────────────────────────
+function animZoom() {
+  const w = window.innerWidth, h = window.innerHeight;
+  // Globe diameter ≈ 512 * 2^z / π; solve for 80% of tighter dimension (10% margin each side)
+  return Math.log2(0.8 * Math.min(w, h) * Math.PI / 512);
+}
+
+
+function getMapPadding() {
+  return window.innerWidth > window.innerHeight
+    ? { top: 0, bottom: 0, left: 0, right: Math.round(window.innerWidth  * 0.2) }
+    : { top: 0, bottom: Math.round(window.innerHeight * 0.2), left: 0, right: 0 };
+}
+
+const map=new mapboxgl.Map({
+  container:'map', style:'mapbox://styles/mapbox/light-v11', projection:'globe',
+  center:[0,0], zoom:animZoom(), pitch:0, bearing:0, attributionControl:false,
+});
+map.setPadding(getMapPadding());
+window.addEventListener('resize', () => map.setPadding(getMapPadding()));
+
+map.on('style.load',()=>{ styleReady=true; setupAllLayers(); });
+map.on('moveend',updateGrid);
+map.on('zoomend',updateGrid);
+
+map.once('load',()=>{
+  map.on('zoom',()=>{}); // keep zoom events flowing
+  map.on('mousemove',e=>{
+    if (appState==='explorer') { map.getCanvas().style.cursor='crosshair'; return; }
+    if (appState==='examine') {
+      const hit = nearestAnimCircle(e.lngLat, 3) !== null;
+      map.getCanvas().style.cursor = hit ? 'pointer' : '';
+    }
+  });
+
+  map.on('click',e=>{
+    if (appState==='loading') return;
+    if (appState==='animation') { enterState('examine'); handleExamineClick(e); return; }
+    if (appState==='examine')   { handleExamineClick(e); return; }
+    if (appState==='explorer') {
+      if (e.originalEvent._handled) return;
+      handleExpClick(e); return;
+    }
+    if (appState==='revealed'||appState==='detailed') {
+      if (e.originalEvent._handled) return;
+      handleRevealClick(e);
+    }
+  });
+
+  document.addEventListener('keydown',e=>{
+    if (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+    if (appState==='explorer') {
+      if (e.key==='o'||e.key==='O') loadPaperLine(PAPER_OCEAN);
+      if (e.key==='l'||e.key==='L') loadPaperLine(PAPER_LAND);
+      if (e.key==='z'&&(e.ctrlKey||e.metaKey)) { e.preventDefault(); if(undoStack.length)restoreUndo(undoStack.pop()); }
+    }
+    if ((appState==='revealed'||appState==='detailed')&&e.key==='Escape') clearPerturbed();
+  });
+
+  map.getCanvas().addEventListener('mousedown',  () => { spinPaused = true; });
+  map.getCanvas().addEventListener('touchstart', () => { spinPaused = true; }, {passive:true});
+  document.addEventListener('mouseup',  () => { spinPaused = false; });
+  document.addEventListener('touchend', () => { spinPaused = false; });
+  map.on('dragstart', () => { if (appState==='animation') enterState('examine'); });
+});
+
+// ── Explorer click ────────────────────────────────────────────────────────────
+function handleExpClick(e) {
+  const {lat,lng:lon}=e.lngLat; if(!isFinite(lat)||!isFinite(lon)) return;
+  saveUndo();
+  const idx=explorerClickCount%2; explorerClickCount++;
+  placeMarker(idx,lat,lon);
+  if (explorerPoints[0]&&explorerPoints[1]) computeAndDraw();
+}
+
+// ── Reveal click (perturb) ────────────────────────────────────────────────────
+function handleRevealClick(e) {
+  if (!FINE_GRIDS) return;
+  const clickPt=latlonToCart(e.lngLat.lat,e.lngLat.lng);
+  const features=[], parts=[], hmHL={}, fracs={}, active=ACTIVE();
+  for (let si=0;si<2;si++) {
+    const key=active[si], color=COLORS[si], gd=FINE_GRIDS[key];
+    const n0=thetaPhiToNormal(gd.theta_center_deg+gd.offsets_deg[gd.best_i], gd.phi_center_deg+gd.offsets_deg[gd.best_j]);
+    const n1=perturbNormal(n0,clickPt); if(!n1) continue;
+    const [tn,pn]=normalToThetaPhi(n1);
+    const frac=interpGrid(gd,tn,pn); if(frac===null) continue;
+    features.push({type:'Feature',properties:{color},geometry:{type:'LineString',coordinates:gcCoords(n1)}});
+    parts.push(expFmt(key,frac)); fracs[si]=frac;
+    const pos=gridCoords(gd,tn,pn); if(pos) hmHL[si]={...pos,color};
+  }
+  if (features.length===0) { clearPerturbed(); return; }
+  map.getSource('perturbed').setData({type:'FeatureCollection',features});
+  const cr=document.getElementById('click-result'); cr.textContent=parts.join('  ·  '); cr.style.display='block';
+  if (FINE_GRIDS&&appState==='detailed') {
+    const [k0,k1]=ACTIVE();
+    drawHeatmap('hm-0',FINE_GRIDS[k0],hmHL[0]||null); drawHeatmap('hm-1',FINE_GRIDS[k1],hmHL[1]||null);
+    updatePctEl(0,k0,fracs[0]); updatePctEl(1,k1,fracs[1]);
+  }
+}
+function clearPerturbed() {
+  if(map.getSource('perturbed')) map.getSource('perturbed').setData(emptyFC());
+  document.getElementById('click-result').style.display='none';
+  if (FINE_GRIDS&&appState==='detailed') {
+    const [k0,k1]=ACTIVE();
+    drawHeatmap('hm-0',FINE_GRIDS[k0],null); drawHeatmap('hm-1',FINE_GRIDS[k1],null);
+    updatePctEl(0,k0,undefined); updatePctEl(1,k1,undefined);
+  }
+}
+
+// ── Examine click (pick a random GC) ─────────────────────────────────────────
+// Angular distance (degrees) from a unit-sphere point to a great circle's plane.
+function degToGC(lngLat, normal) {
+  const p = toXYZ(lngLat.lat, lngLat.lng);
+  const dot = p[0]*normal[0] + p[1]*normal[1] + p[2]*normal[2];
+  return Math.abs(Math.asin(Math.max(-1, Math.min(1, dot)))) * 180/Math.PI;
+}
+// Returns index of nearest anim circle within thresholdDeg, or null.
+function nearestAnimCircle(lngLat, thresholdDeg) {
+  let best = null, bestDist = thresholdDeg;
+  for (let i = 0; i < animCircleData.length; i++) {
+    if (!animCircleData[i]?.normal) continue;
+    const d = degToGC(lngLat, animCircleData[i].normal);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  return best;
+}
+function handleExamineClick(e) {
+  const idx = nearestAnimCircle(e.lngLat, 5);
+  if (idx === null) return;
+  const d = animCircleData[idx];
+  const examEl = document.getElementById('exam-pct');
+  examEl.textContent = d.pct;
+  examEl.style.color = d.pct.endsWith('ocean') ? '#00e5ff' : '#ff1744';
+  // Highlight selected circle
+  const step = Math.max(1, Math.round(TRANSITION_PTS / DISPLAY_PTS));
+  const allPts = sampleGC(d.normal, TRANSITION_PTS);
+  const features = buildExplorerSegments(allPts, step);
+  if (map.getSource('selected-circle'))
+    map.getSource('selected-circle').setData({type:'FeatureCollection', features});
+  showCard('card-examine');
+}
+function clearSelectedCircle() {
+  if (map.getSource('selected-circle'))
+    map.getSource('selected-circle').setData(emptyFC());
+}
+
+// ── Button handlers ───────────────────────────────────────────────────────────
+document.getElementById('logo-panel').addEventListener('click',()=>{ if(appState!=='loading') enterState('animation'); });
+document.getElementById('try-btn').addEventListener('click',()=>{ if(appState==='examine') enterState('explorer'); });
+document.getElementById('reveal-btn').addEventListener('click',()=>{ if(appState==='explorer') enterState('revealed'); });
+document.getElementById('details-btn').addEventListener('click',()=>{
+  if (appState==='revealed') { enterState('detailed'); document.getElementById('details-btn').textContent='Close'; }
+  else if (appState==='detailed') { enterState('revealed'); document.getElementById('details-btn').textContent='Details'; }
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+function addLayerSources() {
+  // Add the monochrome LAYERS from etopo_visuals.json; kept visibility:none,
+  // but needed so applyCoarseVisibility / applyDataset references don't error.
+  if (!DATA || !LAYERS || !styleReady) return;
+  LAYERS.forEach(l=>{
+    if (!map.getSource(l.id)) map.addSource(l.id,{type:'geojson',data:DATA[l.id]});
+    const paint={'line-color':l.color,'line-width':l.width,'line-opacity':l.opacity};
+    if (l.dashed) paint['line-dasharray']=[5,4];
+    if (!map.getLayer(l.id)) map.addLayer({id:l.id,type:'line',source:l.id,paint,
+      layout:{'line-cap':l.dashed?'butt':'round','line-join':'round','visibility':'none'}});
   });
 }
 
 fetch(VISUALS_URL)
-  .then(r => r.json())
-  .then(d => {
-    applyDataset(d);
-    dataReady = true;
-    renderSummaryRows();
-    if (styleReady) setupMapLayers();
+  .then(r=>r.json())
+  .then(d=>{
+    applyDataset(d); dataReady=true;
+    updateRevealBtn();
+    if (styleReady) addLayerSources();
+    if ((appState==='revealed'||appState==='detailed')&&styleReady) { showRevealedCircles(); if(appState==='detailed')loadAndApplyDetails(); }
   })
-  .catch(err => console.error('Failed to load', VISUALS_URL, err));
+  .catch(err=>console.error('Visuals load failed:',err));
 
 loadMask();
 </script>
