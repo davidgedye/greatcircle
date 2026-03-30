@@ -96,31 +96,7 @@
       #details-panel, #details-btn { display: none !important; }
     }
 
-    /* ── Navigation controls ───────────────────────────────────────── */
-    /* ── North-up button (sits left of style selector) ─────────────── */
-    #north-up-btn {
-      position: absolute; bottom: 32px; left: 12px; z-index: 10;
-      display: flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px;
-      background: rgba(0,0,0,0.72); border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 5px; cursor: pointer;
-    }
-    #north-up-btn:hover { background: rgba(40,40,40,0.9); }
-    body.state-loading   #north-up-btn,
-    body.state-animation #north-up-btn,
-    body.state-examine   #north-up-btn { display: none; }
-
     /* ── Overlays ──────────────────────────────────────────────────── */
-    #style-select {
-      position: absolute; bottom: 32px; left: 52px;
-      background: rgba(0,0,0,0.72); color: #fff;
-      font: 13px/1 'Helvetica Neue', sans-serif;
-      padding: 8px 10px; border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 5px; cursor: pointer; z-index: 10;
-    }
-    body.state-loading   #style-select,
-    body.state-animation #style-select,
-    body.state-examine   #style-select { display: none; }
     #click-result {
       position: absolute; bottom: 58px; left: 50%;
       transform: translateX(-50%);
@@ -193,13 +169,6 @@
   </div>
 </div>
 
-<button id="north-up-btn" title="Reset bearing to north">
-  <svg viewBox="0 0 29 29" width="18" height="18">
-    <path d="M10.5 14l4-8 4 8h-8z" fill="rgba(0,0,0,0.75)"/>
-    <path d="M10.5 16l4 8 4-8h-8z" fill="#bbb"/>
-  </svg>
-</button>
-<select id="style-select"></select>
 <div id="click-result"></div>
 
 <script>
@@ -895,21 +864,6 @@ function setupAllLayers() {
   updateGrid();
 }
 
-// ── Style switcher ────────────────────────────────────────────────────────────
-const STYLES=[
-  {label:'Light',             url:'mapbox://styles/mapbox/light-v11'},
-  {label:'Satellite',         url:'mapbox://styles/mapbox/satellite-v9'},
-  {label:'Satellite + roads', url:'mapbox://styles/mapbox/satellite-streets-v12'},
-  {label:'Dark',              url:'mapbox://styles/mapbox/dark-v11'},
-  {label:'Outdoors',          url:'mapbox://styles/mapbox/outdoors-v12'},
-];
-const styleSelect=document.getElementById('style-select');
-STYLES.forEach(s=>{
-  const opt=document.createElement('option'); opt.value=s.url; opt.textContent=s.label;
-  if(s.url===STYLES[0].url) opt.selected=true; styleSelect.appendChild(opt);
-});
-styleSelect.addEventListener('change',()=>map.setStyle(styleSelect.value));
-
 // ── Map init ──────────────────────────────────────────────────────────────────
 function animZoom() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -919,11 +873,9 @@ function animZoom() {
 
 
 const map=new mapboxgl.Map({
-  container:'map', style:STYLES[0].url, projection:'globe',
+  container:'map', style:'mapbox://styles/mapbox/light-v11', projection:'globe',
   center:[0,0], zoom:animZoom(), pitch:0, bearing:0, attributionControl:false,
 });
-map.addControl(new mapboxgl.AttributionControl({compact:true}),'bottom-right');
-document.getElementById('north-up-btn').addEventListener('click',()=>map.easeTo({bearing:0,duration:300}));
 
 map.on('style.load',()=>{ styleReady=true; setupAllLayers(); });
 map.on('moveend',updateGrid);
