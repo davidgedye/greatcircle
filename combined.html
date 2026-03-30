@@ -147,7 +147,6 @@
   <!-- Examine state -->
   <div id="panel-examine">
     <span id="exam-pct"></span>
-    <span id="exam-segments"></span>
     <button id="try-btn">Try your own great circle</button>
   </div>
 
@@ -155,7 +154,6 @@
   <div id="panel-explorer">
     <span id="exp-status">Click two points</span>
     <span id="exp-pct"></span>
-    <span id="exp-segments"></span>
     <button id="reveal-btn" disabled>Reveal Wettest &amp; Driest</button>
   </div>
 
@@ -240,11 +238,10 @@ const undoStack = [];
 
 // Animation
 let animRAF = null, animInterval = null, animCircleCount = 0, animFeatures = [], animCircleData = [];
-let lastAnimPct = '', lastAnimTransitions = '', lastAnimSegments = '';
+let lastAnimPct = '';
 
 const isMobile  = () => window.matchMedia('(max-width:640px)').matches;
 const emptyFC   = () => ({ type: 'FeatureCollection', features: [] });
-const fmtKm     = km => km < 1 ? '—' : Math.round(km).toLocaleString() + ' km';
 
 // ── State machine ─────────────────────────────────────────────────────────────
 function enterState(s) {
@@ -256,7 +253,7 @@ function enterState(s) {
 
 function onStateExit(s) {
   if (s === 'animation') { stopSpinning(); stopAnimInterval(); } // lines kept for examine
-  if (s === 'examine')   { clearAnimLines(); }
+  if (s === 'examine')   { clearAnimLines(); clearSelectedCircle(); }
   if (s === 'explorer')  { clearExplorer(); }
 }
 
@@ -274,7 +271,7 @@ function onStateEnter(s) {
   }
   if (s === 'examine') {
     document.getElementById('exam-pct').textContent = lastAnimPct;
-    document.getElementById('exam-segments').innerHTML      = lastAnimSegments;
+    clearSelectedCircle();
     map.getCanvas().style.cursor = '';
   }
   if (s === 'explorer')  { setExpStatus('Click two points'); map.getCanvas().style.cursor = 'crosshair'; }
@@ -471,38 +468,7 @@ function buildSegmentFeatures(pts, displayStep, thickOnLand) {
 }
 
 // ── Explorer stats ────────────────────────────────────────────────────────────
-function countTransitions(pts) {
-  let count=0, prev=isLand(pts[0].lat,pts[0].lon);
-  for (let i=1;i<pts.length;i++) { const c=isLand(pts[i].lat,pts[i].lon); if (c!==prev){count++;prev=c;} }
-  return count;
-}
-function computeSegmentStats(pts) {
-  const segs=[]; let segLand=isLand(pts[0].lat,pts[0].lon), segLen=1, segStart=0;
-  for (let i=1;i<pts.length;i++) {
-    const c=isLand(pts[i].lat,pts[i].lon);
-    if (c===segLand) { segLen++; }
-    else { segs.push({land:segLand,len:segLen,start:segStart,end:i-1,wrapped:false}); segLand=c;segLen=1;segStart=i; }
-  }
-  segs.push({land:segLand,len:segLen,start:segStart,end:pts.length-1,wrapped:false});
-  if (segs.length>1 && segs[0].land===segs[segs.length-1].land) {
-    const last=segs.pop();
-    segs[0]={land:segs[0].land,len:last.len+segs[0].len,start:last.start,end:segs[0].end,wrapped:true};
-  }
-  let bestO={len:0}, bestL={len:0};
-  for (const s of segs) { if(s.land){if(s.len>bestL.len)bestL=s;}else{if(s.len>bestO.len)bestO=s;} }
-  const km=s=>(s.len/pts.length)*40075;
-  return {longestOcean:km(bestO),longestLand:km(bestL),oceanSeg:bestO,landSeg:bestL};
-}
-function segToCoords(pts,seg,step) {
-  if (!seg||seg.len<2) return null;
-  const indices=[];
-  if (seg.wrapped) { for(let i=seg.start;i<pts.length;i++)indices.push(i); for(let i=0;i<=seg.end;i++)indices.push(i); }
-  else { for(let i=seg.start;i<=seg.end;i++)indices.push(i); }
-  const coords=[];
-  for (let j=0;j<indices.length;j+=step) coords.push(indices[j]);
-  if (coords[coords.length-1]!==indices[indices.length-1]) coords.push(indices[indices.length-1]);
-  return coords.map(i=>[pts[i].lon,pts[i].lat]);
-}
+
 
 // ── Animation subsystem ───────────────────────────────────────────────────────
 function randomNormal() {
@@ -532,14 +498,9 @@ function addAnimCircle() {
   const allPts=sampleGC(normal,TRANSITION_PTS);
   let landCount=0; for(const p of allPts) landCount+=isLand(p.lat,p.lon);
   const oceanFrac=(1-landCount/allPts.length)*100;
-  const transitions=countTransitions(allPts);
-  const stats=computeSegmentStats(allPts);
   const circleIdx = animCircleCount;
   lastAnimPct         = fmtPct(oceanFrac);
-  lastAnimTransitions = '';
-  lastAnimSegments    = `<span style="color:${COLOR_OCEAN}">▬</span> ${fmtKm(stats.longestOcean)}`+
-                        `&ensp;<span style="color:${COLOR_LAND}">▬</span> ${fmtKm(stats.longestLand)}`;
-  animCircleData[circleIdx] = { pct: lastAnimPct, transitions: lastAnimTransitions, segments: lastAnimSegments, normal };
+  animCircleData[circleIdx] = { pct: lastAnimPct, normal };
   const step=Math.max(1,Math.round(TRANSITION_PTS/DISPLAY_PTS));
   animFeatures.push(...buildExplorerSegments(allPts,step,circleIdx));
   animCircleCount++;
@@ -563,14 +524,10 @@ function fmtPct(oceanFrac) {
 function setExpStatus(msg) {
   document.getElementById('exp-status').textContent=msg;
   document.getElementById('exp-pct').textContent='';
-  document.getElementById('exp-segments').innerHTML='';
 }
-function updateExpBanner(oceanFrac,transitions,stats) {
+function updateExpBanner(oceanFrac) {
   document.getElementById('exp-status').textContent='';
   document.getElementById('exp-pct').textContent=fmtPct(oceanFrac);
-  document.getElementById('exp-segments').innerHTML=
-    `<span style="color:${COLOR_OCEAN}">▬</span> ${fmtKm(stats.longestOcean)}`+
-    `&ensp;<span style="color:${COLOR_LAND}">▬</span> ${fmtKm(stats.longestLand)}`;
 }
 function makeMarker(idx) {
   const el=document.createElement('div');
@@ -598,31 +555,21 @@ function computeAndDraw() {
   const allPts=sampleGC(n,TRANSITION_PTS);
   let landCount=0; for(const p of allPts) landCount+=isLand(p.lat,p.lon);
   const oceanFrac=(1-landCount/allPts.length)*100;
-  const transitions=countTransitions(allPts);
-  const stats=computeSegmentStats(allPts);
-  updateExpBanner(oceanFrac,transitions,stats);
+  updateExpBanner(oceanFrac);
   const step=Math.max(1,Math.round(TRANSITION_PTS/DISPLAY_PTS));
   map.getSource('gc-line').setData({type:'FeatureCollection',features:buildExplorerSegments(allPts,step)});
-  const hl=[];
-  const oc=segToCoords(allPts,stats.oceanSeg,step);
-  if(oc) for(const s of splitAtAntimeridian(oc)) hl.push({type:'Feature',geometry:{type:'LineString',coordinates:s},properties:{color:COLOR_OCEAN}});
-  const lc=segToCoords(allPts,stats.landSeg,step);
-  if(lc) for(const s of splitAtAntimeridian(lc)) hl.push({type:'Feature',geometry:{type:'LineString',coordinates:s},properties:{color:COLOR_LAND}});
-  map.getSource('gc-highlight').setData({type:'FeatureCollection',features:hl});
 }
 function drawFast() {
   const [A,B]=explorerPoints; if(!A||!B) return;
   const allPts=sampleGC(gcNormal(A.lat,A.lon,B.lat,B.lon),TRANSITION_PTS);
   let lc=0; for(const p of allPts) lc+=isLand(p.lat,p.lon);
   document.getElementById('exp-pct').textContent=fmtPct((1-lc/allPts.length)*100);
-  map.getSource('gc-highlight').setData(emptyFC());
   const pts=subsample(allPts,DISPLAY_PTS);
   map.getSource('gc-line').setData({type:'FeatureCollection',
     features:splitAtAntimeridian(pts.map(p=>[p.lon,p.lat])).map(s=>({type:'Feature',geometry:{type:'LineString',coordinates:s},properties:{color:COLOR_DRAG}}))});
 }
 function clearExplorer() {
-  if(map.getSource('gc-line'))      map.getSource('gc-line').setData(emptyFC());
-  if(map.getSource('gc-highlight')) map.getSource('gc-highlight').setData(emptyFC());
+  if(map.getSource('gc-line')) map.getSource('gc-line').setData(emptyFC());
   explorerPoints=[null,null];
   explorerMarkers.forEach(m=>m&&m.remove()); explorerMarkers=[null,null];
   explorerClickCount=0;
@@ -630,8 +577,7 @@ function clearExplorer() {
 function saveUndo() { undoStack.push(explorerPoints.map(p=>p?{...p}:null)); }
 function restoreUndo(snap) {
   explorerPoints=[null,null]; explorerMarkers.forEach(m=>m&&m.remove()); explorerMarkers=[null,null]; explorerClickCount=0;
-  if(map.getSource('gc-line'))      map.getSource('gc-line').setData(emptyFC());
-  if(map.getSource('gc-highlight')) map.getSource('gc-highlight').setData(emptyFC());
+  if(map.getSource('gc-line')) map.getSource('gc-line').setData(emptyFC());
   setExpStatus('Click two points');
   snap.forEach((p,i)=>{if(p){placeMarker(i,p.lat,p.lon);explorerClickCount++;}});
   if(explorerPoints[0]&&explorerPoints[1]) computeAndDraw();
@@ -880,14 +826,15 @@ function setupAllLayers() {
   map.addSource('anim-lines',{type:'geojson',data:emptyFC()});
   map.addLayer({id:'anim-lines',type:'line',source:'anim-lines',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':['get','color'],'line-width':2.5,'line-opacity':0.7}});
 
+  // selected circle in examine mode (2× thickness of anim-lines)
+  map.addSource('selected-circle',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'selected-line',type:'line',source:'selected-circle',layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':['get','color'],'line-width':5,'line-opacity':1.0}});
+
   // explorer: main + highlight
   map.addSource('gc-line',{type:'geojson',data:emptyFC()});
   map.addLayer({id:'gc-line',type:'line',source:'gc-line',layout:{'line-cap':'round','line-join':'round'},
     paint:{'line-color':['get','color'],'line-width':['interpolate',['exponential',2],['zoom'],0,1.5,5,2.5,10,7],'line-opacity':0.88}});
-  map.addSource('gc-highlight',{type:'geojson',data:emptyFC()});
-  map.addLayer({id:'gc-highlight',type:'line',source:'gc-highlight',layout:{'line-cap':'round','line-join':'round'},
-    paint:{'line-color':['get','color'],'line-width':['interpolate',['exponential',2],['zoom'],0,3.5,5,5.5,10,14],'line-opacity':1.0}});
-
   // coarse segments (details mode)
   ['wet','dry'].forEach(side=>{
     map.addSource('coarse-segments-'+side,{type:'geojson',data:emptyFC()});
@@ -1089,7 +1036,16 @@ function handleExamineClick(e) {
   if (idx === null) return;
   const d = animCircleData[idx];
   document.getElementById('exam-pct').textContent = d.pct;
-  document.getElementById('exam-segments').innerHTML      = d.segments;
+  // Highlight selected circle
+  const step = Math.max(1, Math.round(TRANSITION_PTS / DISPLAY_PTS));
+  const allPts = sampleGC(d.normal, TRANSITION_PTS);
+  const features = buildExplorerSegments(allPts, step);
+  if (map.getSource('selected-circle'))
+    map.getSource('selected-circle').setData({type:'FeatureCollection', features});
+}
+function clearSelectedCircle() {
+  if (map.getSource('selected-circle'))
+    map.getSource('selected-circle').setData(emptyFC());
 }
 
 // ── Button handlers ───────────────────────────────────────────────────────────

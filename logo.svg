@@ -13,9 +13,6 @@
     <path id="challenge-path" d="M 51 160 A 80 80 0 0 0 189 160"/>
   </defs>
 
-  <!-- Solid background (prevents transparent letterboxing in PNG export) -->
-  <rect width="240" height="240" fill="#080e18"/>
-
   <!-- Globe background -->
   <circle cx="120" cy="120" r="90" fill="#080e18"/>
 
