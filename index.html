@@ -39,6 +39,8 @@
     #exp-records.dimmed { opacity: 0.35; pointer-events: none; }
     @media (orientation: landscape) {
       #exp-records { margin-top: 16px; white-space: nowrap; }
+      #exp-wet-row { margin-top: 1em; }
+      #rev-numbers { white-space: nowrap; }
     }
     #exp-cur-ocean, #exp-wet-val, #rev-wet-pct { color: #00e5ff; }
     #exp-cur-land, #exp-dry-val, #rev-dry-pct { color: #ff1744; }
@@ -168,7 +170,7 @@
     <div class="msg-mobile">Click on two points to specify a great circle.</div>
     <div id="exp-records" class="dimmed">
       <div><strong id="exp-cur-ocean">–</strong> / <strong id="exp-cur-land">–</strong></div>
-      <div>Your wettest: <strong id="exp-wet-val">–</strong></div>
+      <div id="exp-wet-row">Your wettest: <strong id="exp-wet-val">–</strong></div>
       <div>Your driest: <strong id="exp-dry-val">–</strong></div>
     </div>
     <button id="reveal-btn" disabled>Absolute Wettest and Driest</button>
@@ -176,10 +178,13 @@
 
   <!-- Reveal / Detailed -->
   <div id="card-reveal" class="card-section">
-    <div>Absolute wettest: <strong id="rev-wet-pct">–</strong></div>
-    <div>Absolute driest: <strong id="rev-dry-pct">–</strong></div>
-    <a href="about.html" target="_blank" id="about-link">How I calculated this</a>
-    <button id="details-btn">Details</button>
+    <div id="scan-msg" style="display:none">The code scored 32,400 uniformly sampled great circles and then finely sampled around the 10 most promising.</div>
+    <div id="rev-numbers">
+      <div>Absolute wettest: <strong id="rev-wet-pct">–</strong></div>
+      <div>Absolute driest: <strong id="rev-dry-pct">–</strong></div>
+    </div>
+    <a href="about.html" target="_blank" id="about-link">More information</a>
+    <button id="details-btn">Show Top Candidates</button>
   </div>
 
 </div><!-- /message-card -->
@@ -235,6 +240,7 @@ const coarseShow = { 'wet-coarse': true, 'dry-coarse': true };
 
 // Explorer
 let explorerPoints = [null, null], explorerMarkers = [null, null], explorerClickCount = 0;
+let markerJustDragged = false;
 const undoStack = [];
 
 // Animation
@@ -300,9 +306,26 @@ function onStateEnter(s, prev) {
     map.easeTo({ zoom:animZoom(), pitch:0, bearing:0, duration:800, padding:getMapPadding() });
   }
   if (s === 'revealed') {
-    map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:1800, padding:getMapPadding() });
-    if (prev === 'explorer') startRevealScan(() => showRevealedCircles());
-    else showRevealedCircles();
+    if (prev === 'explorer') {
+      startRevealScan(() => {
+        map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 2000, delay: 0 });
+        map.setPaintProperty('scan-line', 'line-opacity', 0);
+        map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:2000, padding:getMapPadding() });
+        document.getElementById('rev-numbers').style.visibility = 'visible';
+        showRevealedCircles();
+        scanFadeTimer = setTimeout(() => {
+          scanFadeTimer = null;
+          if (map.getSource('scan-line')) {
+            map.getSource('scan-line').setData(emptyFC());
+            map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 0, delay: 0 });
+            map.setPaintProperty('scan-line', 'line-opacity', 0.6);
+          }
+        }, 2000);
+      });
+    } else {
+      map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:1800, padding:getMapPadding() });
+      showRevealedCircles();
+    }
   }
   if (s === 'detailed') showRevealedCircles();
   if (s === 'detailed' && !isMobile()) loadAndApplyDetails();
@@ -545,33 +568,54 @@ function stopAnimInterval()  { if(animInterval){clearInterval(animInterval);anim
 function clearAnimLines()    { animFeatures=[];animCircleCount=0;animCircleData=[]; if(map.getSource('anim-lines'))map.getSource('anim-lines').setData(emptyFC()); }
 
 // ── Reveal scan animation ──────────────────────────────────────────────────────
-let scanTimer = null;
+let scanTimer = null, scanFadeTimer = null;
 function stopScan() {
-  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
-  if (map.getSource('scan-line')) map.getSource('scan-line').setData(emptyFC());
+  if (scanTimer)     { clearInterval(scanTimer); scanTimer = null; }
+  if (scanFadeTimer) { clearTimeout(scanFadeTimer); scanFadeTimer = null; }
+  if (map.getSource('scan-line')) {
+    map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 0, delay: 0 });
+    map.setPaintProperty('scan-line', 'line-opacity', 0.6);
+    map.getSource('scan-line').setData(emptyFC());
+  }
+  document.getElementById('scan-msg').style.display = 'none';
+  document.getElementById('rev-numbers').style.visibility = 'visible';
 }
 function startRevealScan(onComplete) {
   // Step through the 180×180 coarse grid at stride 18 → 10×10 = 100 points spanning the full space.
   // Parameterisation matches the actual search: cos θ uniform in [-1,1], φ uniform in [0,π].
-  const N = 180, STRIDE = 18;
+  document.getElementById('scan-msg').style.display = '';
+  document.getElementById('rev-numbers').style.visibility = 'hidden';
+  // Stride-18 sample of the 180×180 coarse grid, starting at offset 9 for symmetry
+  // (cos θ values ≈ ±0.09, ±0.29, ±0.49, ±0.69, ±0.89 — centred around 0).
+  // Shuffled so all inclinations are interleaved rather than arriving in batches.
+  const N = 180, STRIDE = 18, OFFSET = 9;
   const grid = [];
-  for (let i = 0; i < N; i += STRIDE) {
+  for (let i = OFFSET; i < N; i += STRIDE) {
     const cosT = -1 + (i + 0.5) * 2 / N;
     const sinT = Math.sqrt(1 - cosT * cosT);
-    for (let j = 0; j < N; j += STRIDE) {
+    for (let j = OFFSET; j < N; j += STRIDE) {
       const ph = (j + 0.5) * Math.PI / N;
       grid.push([sinT * Math.cos(ph), sinT * Math.sin(ph), cosT]);
     }
   }
+  for (let k = grid.length - 1; k > 0; k--) {
+    const r = Math.floor(Math.random() * (k + 1));
+    [grid[k], grid[r]] = [grid[r], grid[k]];
+  }
   let idx = 0;
+  const accumulated = [];
   scanTimer = setInterval(() => {
-    if (idx >= grid.length) { stopScan(); onComplete(); return; }
+    if (idx >= grid.length) {
+      clearInterval(scanTimer); scanTimer = null;
+      onComplete();
+      return;
+    }
     const normal = grid[idx++];
     const pts = sampleGC(normal, 360);
-    const features = splitAtAntimeridian(pts.map(p => [p.lon, p.lat]))
-      .map(s => ({ type:'Feature', geometry:{type:'LineString', coordinates:s}, properties:{} }));
+    accumulated.push(...splitAtAntimeridian(pts.map(p => [p.lon, p.lat]))
+      .map(s => ({ type:'Feature', geometry:{type:'LineString', coordinates:s}, properties:{} })));
     if (map.getSource('scan-line'))
-      map.getSource('scan-line').setData({ type:'FeatureCollection', features });
+      map.getSource('scan-line').setData({ type:'FeatureCollection', features: accumulated });
   }, 100);
 }
 
@@ -623,7 +667,11 @@ function makeMarker(idx) {
     const ll=m.getLngLat(); explorerPoints[idx]={lat:ll.lat,lon:ll.lng};
     if(explorerPoints[0]&&explorerPoints[1]) drawFast();
   });
-  m.on('dragend',()=>{dragSaved=false; if(explorerPoints[0]&&explorerPoints[1])computeAndDraw();});
+  m.on('dragend',()=>{
+    dragSaved=false;
+    markerJustDragged=true;
+    if(explorerPoints[0]&&explorerPoints[1])computeAndDraw();
+  });
   return m;
 }
 function placeMarker(idx,lat,lon) {
@@ -1048,6 +1096,7 @@ map.once('load',()=>{
 
 // ── Explorer click ────────────────────────────────────────────────────────────
 function handleExpClick(e) {
+  if (markerJustDragged) { markerJustDragged = false; return; }
   const {lat,lng:lon}=e.lngLat; if(!isFinite(lat)||!isFinite(lon)) return;
   saveUndo();
   const idx=explorerClickCount%2; explorerClickCount++;
@@ -1136,8 +1185,8 @@ document.getElementById('logo-panel').addEventListener('click',()=>{ if(appState
 document.getElementById('try-btn').addEventListener('click',()=>{ if(appState==='examine') enterState('explorer'); });
 document.getElementById('reveal-btn').addEventListener('click',()=>{ if(appState==='explorer') enterState('revealed'); });
 document.getElementById('details-btn').addEventListener('click',()=>{
-  if (appState==='revealed') { enterState('detailed'); document.getElementById('details-btn').textContent='Close'; }
-  else if (appState==='detailed') { enterState('revealed'); document.getElementById('details-btn').textContent='Details'; }
+  if (appState==='revealed') { enterState('detailed'); document.getElementById('details-btn').textContent='Hide Top Candidates'; }
+  else if (appState==='detailed') { enterState('revealed'); document.getElementById('details-btn').textContent='Show Top Candidates'; }
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
