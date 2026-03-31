@@ -89,6 +89,8 @@
       }
       .msg-desktop { display: none; }
       #details-btn { display: none !important; }
+      #scan-msg { display: none !important; }
+      body.scanning #message-card { display: none !important; }
       .card-big-pct { text-align: center; }
       #examine-try-another { text-align: center; }
       #message-card .card-section { align-items: center; }
@@ -101,12 +103,12 @@
     /* ── Details panel (desktop / landscape only) ───────────────────── */
     #details-panel {
       display: none; position: absolute;
-      right: 24px; top: 240px; bottom: 12px;
+      right: 24px; top: 170px;
       width: max(200px, calc(50vw - 40vh - 36px));
-      overflow-y: auto;
+      max-height: calc(100vh - 182px); overflow-y: auto;
       background: rgba(8,8,8,0.88); border: 1px solid #2a2a2a;
-      border-radius: 8px; padding: 14px 14px 16px;
-      flex-direction: column; gap: 16px;
+      border-radius: 8px; padding: 8px 14px 10px;
+      flex-direction: column; gap: 10px;
       backdrop-filter: blur(6px); z-index: 10;
     }
     body.state-detailed #details-panel { display: flex; }
@@ -114,11 +116,11 @@
     .tog-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .tog-row input { cursor: pointer; margin: 0; accent-color: #aaa; }
     .tog-swatch { width: 26px; height: 3px; border-radius: 1px; flex-shrink: 0; }
-    .tog-row label { cursor: pointer; font-size: 11px; line-height: 1.4; color: #aaa; }
+    .tog-row label { cursor: pointer; font-size: 12px; line-height: 1.4; color: #aaa; }
     #heatmaps { display: flex; flex-direction: column; gap: 12px; align-items: center; }
     .hm-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-    .hm-label { font-size: 10px; color: #888; letter-spacing: 1px; text-align: center; }
-    .hm-pct   { font-size: 11px; font-weight: bold; }
+    .hm-label { font-size: 12px; color: #888; letter-spacing: 1px; text-align: center; }
+    .hm-pct   { font-size: 12px; font-weight: bold; }
     canvas.heatmap {
       image-rendering: pixelated;
       border: 1px solid #333; border-radius: 2px; cursor: crosshair;
@@ -189,8 +191,8 @@
       <div>Absolute wettest: <strong id="rev-wet-pct">–</strong></div>
       <div>Absolute driest: <strong id="rev-dry-pct">–</strong></div>
     </div>
-    <a href="about.html" target="_blank" id="about-link">More information</a>
-    <button id="details-btn">Show Top Candidates</button>
+    <a href="about.html" target="_blank" id="about-link-mobile" class="msg-mobile" style="color:#888;font-size:0.85em;text-decoration:underline">More information</a>
+    <button id="details-btn">Details</button>
   </div>
 
 </div><!-- /message-card -->
@@ -210,6 +212,7 @@
       <div class="hm-pct" id="hm-1-pct"></div>
     </div>
   </div>
+  <a href="about.html" target="_blank" id="about-link">More information</a>
 </div>
 
 <div id="click-result"></div>
@@ -577,6 +580,7 @@ function clearScanLine() {
   }
 }
 function beginReveal() {
+  document.body.classList.remove('scanning');
   map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 5000, delay: 0 });
   map.setPaintProperty('scan-line', 'line-opacity', 0);
   map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:5000, padding:getMapPadding() });
@@ -588,12 +592,12 @@ function stopScan() {
   if (scanTimer)     { clearInterval(scanTimer); scanTimer = null; }
   if (scanFadeTimer) { clearTimeout(scanFadeTimer); scanFadeTimer = null; }
   clearScanLine();
+  document.body.classList.remove('scanning');
   document.getElementById('scan-msg').style.display = 'none';
   document.getElementById('rev-numbers').style.visibility = 'visible';
 }
 function startRevealScan(onComplete) {
-  // Step through the 180×180 coarse grid at stride 18 → 10×10 = 100 points spanning the full space.
-  // Parameterisation matches the actual search: cos θ uniform in [-1,1], φ uniform in [0,π].
+  document.body.classList.add('scanning');
   // Reset opacity now, while source is empty, to avoid flash when clearScanLine was last called.
   if (map.getSource('scan-line')) {
     map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 0, delay: 0 });
@@ -601,22 +605,14 @@ function startRevealScan(onComplete) {
   }
   document.getElementById('scan-msg').style.display = '';
   document.getElementById('rev-numbers').style.visibility = 'hidden';
-  // Stride-18 sample of the 180×180 coarse grid, starting at offset 9 for symmetry
-  // (cos θ values ≈ ±0.09, ±0.29, ±0.49, ±0.69, ±0.89 — centred around 0).
-  // Shuffled so all inclinations are interleaved rather than arriving in batches.
-  const N = 180, STRIDE = 18, OFFSET = 9;
+  // 100 uniformly random great-circle normals via Marsaglia sphere sampling.
   const grid = [];
-  for (let i = OFFSET; i < N; i += STRIDE) {
-    const cosT = -1 + (i + 0.5) * 2 / N;
-    const sinT = Math.sqrt(1 - cosT * cosT);
-    for (let j = OFFSET; j < N; j += STRIDE) {
-      const ph = (j + 0.5) * Math.PI / N;
-      grid.push([sinT * Math.cos(ph), sinT * Math.sin(ph), cosT]);
-    }
-  }
-  for (let k = grid.length - 1; k > 0; k--) {
-    const r = Math.floor(Math.random() * (k + 1));
-    [grid[k], grid[r]] = [grid[r], grid[k]];
+  while (grid.length < 100) {
+    const u = Math.random() * 2 - 1, v = Math.random() * 2 - 1;
+    if (u * u + v * v >= 1) continue;
+    const s = Math.sqrt(1 - u * u - v * v);
+    // Only need half the sphere (antipodal symmetry of great circles)
+    grid.push([2 * u * s, 2 * v * s, 1 - 2 * (u * u + v * v)]);
   }
   let idx = 0;
   const accumulated = [];
@@ -632,7 +628,7 @@ function startRevealScan(onComplete) {
       .map(s => ({ type:'Feature', geometry:{type:'LineString', coordinates:s}, properties:{} })));
     if (map.getSource('scan-line'))
       map.getSource('scan-line').setData({ type:'FeatureCollection', features: accumulated });
-  }, 100);
+  }, 50);
 }
 
 // ── Explorer subsystem ────────────────────────────────────────────────────────
@@ -1187,8 +1183,8 @@ document.getElementById('logo-panel').addEventListener('click',()=>{ if(appState
 document.getElementById('try-btn').addEventListener('click',()=>{ if(appState==='examine') enterState('explorer'); });
 document.getElementById('reveal-btn').addEventListener('click',()=>{ if(appState==='explorer') enterState('revealed'); });
 document.getElementById('details-btn').addEventListener('click',()=>{
-  if (appState==='revealed') { enterState('detailed'); document.getElementById('details-btn').textContent='Hide Top Candidates'; }
-  else if (appState==='detailed') { enterState('revealed'); document.getElementById('details-btn').textContent='Show Top Candidates'; }
+  if (appState==='revealed') { enterState('detailed'); document.getElementById('details-btn').textContent='Hide Details'; }
+  else if (appState==='detailed') { enterState('revealed'); document.getElementById('details-btn').textContent='Details'; }
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
