@@ -7,7 +7,7 @@ An interactive visualisation is hosted at **https://davidgedye.github.io/greatci
 
 ## Background
 
-Chabukswar & Mukherjee (2018) found the longest *uninterrupted* great-circle path over water (32,090 km, Pakistan → Kamchatka). That is a different objective: longest single segment, not maximum total fraction. This project addresses the total-fraction version, which does not appear to have been published.
+[Chabukswar & Mukherjee (2018)](https://arxiv.org/abs/1804.07389) found the longest *uninterrupted* great-circle path over water (32,090 km, Pakistan → Kamchatka). That is a different objective: longest single segment, not maximum total fraction. This project addresses the total-fraction version, which does not appear to have been published.
 
 ## Data
 
@@ -63,6 +63,9 @@ The wettest circle tilts through the Indian Ocean, western Pacific and Arctic �
 
 ```
 index.html                          Web visualisation (GitHub Pages root)
+about.html                          Renders README.md in-browser (linked from map)
+sw.js                               Service worker (offline cache)
+manifest.json                       PWA manifest
 experiments/
   wettest_driest/
     great_circles.py                Search algorithm — writes results JSON
@@ -105,31 +108,29 @@ python3 -m http.server 8000  # from repo root
 
 ## Visualisation
 
-The web page (`index.html`) loads map data immediately and lazily loads detail data (heatmaps, boundary arrows) only when the Details panel is opened.
+The web page (`index.html`) is a guided experience with four phases:
+
+1. **Animation** — the globe spins and random great circles accumulate, each coloured by land (red) and ocean (blue). Click any circle to see its land/ocean split.
+2. **Examine** — click a circle to highlight it and see its percentage. Click again for context; a button invites you to try your own.
+3. **Explorer** — place two points on the globe to define a great circle; the land/ocean split updates live as you drag the points. A Reveal button appears once data is ready.
+4. **Revealed** — the computed wettest and driest circles are drawn. A Details panel (desktop only) shows fine-search heatmaps and coarse top-10 candidates.
 
 **Map features:**
 - Globe projection with atmosphere and fog
-- Switchable basemap (Satellite, Dark, Outdoors, Light, etc.)
-- Fine best great circles shown by default; coarse top-10 toggleable in Details
+- Fine best great circles shown in the Revealed phase; coarse top-10 toggleable in Details
 - Lines grow in width with zoom; fine best lines represent the ~10 km positional uncertainty band
-- Scale indicator (bottom left)
 
-**Land/water boundary arrows** (Details panel):
-- Triangular arrows at every land/water transition along the top-10 coarse and best fine circles, pointing toward land
-- Computed at full dataset resolution using chunked streaming to avoid loading the full elevation file into memory
-
-**Fine search heatmaps** (Details panel):
+**Fine search heatmaps** (Details panel, desktop only):
 - Show the optimisation landscape across the ±2° fine search window
 - Click a cell to draw that great circle on the map
 - Click on the map near a winning line to highlight the corresponding heatmap cell
 
 **Great circle pole markers:**
 - `+` symbols mark both poles of each winning circle's axis
-- Clicking a pole shows an explanation in the HUD
 
 **Mobile layout:**
-- At ≤640 px width, the panel collapses to a compact bottom bar showing the wettest/driest percentages and a map style selector
-- Details and heatmaps require a larger screen
+- Card appears below the globe showing contextual text for each phase
+- Details panel and heatmaps require a larger screen
 
 ## Uncertainty
 
