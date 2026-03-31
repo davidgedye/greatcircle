@@ -19,9 +19,17 @@
     /* ── Logo panel (top-left) ──────────────────────────────────────── */
     #logo-panel {
       position: absolute; top: 12px; left: 12px; z-index: 10;
-      line-height: 0;  /* collapse img whitespace */
-      cursor: pointer;
+      display: flex; flex-direction: column; align-items: flex-start; gap: 0;
     }
+    #logo-panel img { display: block; cursor: pointer; }
+    #prev-btn {
+      color: #fff; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+      cursor: pointer; font-family: inherit; display: none; opacity: 0.75;
+      width: 110px; text-align: center; margin-top: -10px;
+    }
+    #prev-btn:hover { opacity: 1; }
+    body.state-examine #prev-btn, body.state-explorer #prev-btn,
+    body.state-revealed #prev-btn, body.state-detailed #prev-btn { display: inline; }
 
     /* ── Message card ───────────────────────────────────────────────── */
     #message-card {
@@ -154,6 +162,7 @@
 <!-- Logo (top-left) -->
 <div id="logo-panel">
   <img src="logo.svg" alt="Great Circle Challenge" width="110">
+  <span id="prev-btn">←Previous</span>
 </div>
 
 <!-- Message card -->
@@ -290,7 +299,7 @@ function showCard(sectionId) {
 }
 
 function onStateExit(s, next) {
-  if (s === 'animation') { stopSpinning(); stopAnimInterval(); animDone = false; }
+  if (s === 'intro') { stopSpinning(); stopAnimInterval(); animDone = false; }
   if (s === 'examine')   { clearAnimLines(); clearSelectedCircle(); }
   if (s === 'explorer')  { clearExplorer(); resetExpRecords(); }
   if (s === 'revealed' || s === 'detailed') {
@@ -305,12 +314,13 @@ function onStateExit(s, next) {
 
 function onStateEnter(s, prev) {
   if (s === 'loading')                          showCard(null);
-  if (s === 'animation')                        showCard('card-anim1');
+  if (s === 'intro')                            showCard('card-anim1');
   if (s === 'examine')                          showCard(isMobile() ? 'card-anim2' : 'card-anim1');
   if (s === 'explorer')                         showCard('card-explorer');
   if (s === 'revealed' || s === 'detailed')     showCard('card-reveal');
 
-  if (s === 'animation') {
+  if (s === 'intro') {
+    clearAnimLines();  // always start fresh when returning to intro
     map.jumpTo({ center:[0,0], zoom:animZoom(), pitch:0, bearing:0, padding:getMapPadding() });
     startSpinning(); startAnimInterval();
   }
@@ -336,8 +346,8 @@ function onStateEnter(s, prev) {
 }
 
 function reapplyCurrentState() {
-  if ((appState === 'animation' || appState === 'examine') && map.getSource('anim-lines') && animFeatures.length)
-    map.getSource('anim-lines').setData({ type:'FeatureCollection', features: animFeatures });
+  if ((appState === 'intro' || appState === 'examine') && map.getSource('intro-lines') && animFeatures.length)
+    map.getSource('intro-lines').setData({ type:'FeatureCollection', features: animFeatures });
   if (appState === 'explorer') {
     if (explorerPoints[0] && explorerPoints[1]) computeAndDraw();
   }
@@ -355,7 +365,7 @@ async function loadMask() {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     mask = new Uint8Array(await new Response(resp.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
     maskReady = true;
-    if (appState === 'loading') { enterState('animation'); }
+    if (appState === 'loading') { enterState('intro'); }
     else if ((appState === 'revealed' || appState === 'detailed') && styleReady && dataReady) refreshFineSegments();
     updateGrid();
   } catch(e) { console.error('Mask failed:', e); }
@@ -564,17 +574,17 @@ function addAnimCircle() {
   const step=Math.max(1,Math.round(TRANSITION_PTS/DISPLAY_PTS));
   animFeatures.push(...buildExplorerSegments(allPts,step,circleIdx));
   animCircleCount++;
-  if (map.getSource('anim-lines'))
-    map.getSource('anim-lines').setData({type:'FeatureCollection',features:animFeatures});
+  if (map.getSource('intro-lines'))
+    map.getSource('intro-lines').setData({type:'FeatureCollection',features:animFeatures});
   if (animCircleCount>=MAX_ANIM_CIRCLES) {
     stopAnimInterval();
     animDone = true;
-    if (appState === 'animation' && isMobile()) showCard('card-anim2');
+    if (appState === 'intro' && isMobile()) showCard('card-anim2');
   }
 }
-function startAnimInterval() { addAnimCircle(); animInterval=setInterval(()=>{if(appState==='animation')addAnimCircle();},500); }
+function startAnimInterval() { addAnimCircle(); animInterval=setInterval(()=>{if(appState==='intro')addAnimCircle();},500); }
 function stopAnimInterval()  { if(animInterval){clearInterval(animInterval);animInterval=null;} }
-function clearAnimLines()    { animFeatures=[];animCircleCount=0;animCircleData=[]; if(map.getSource('anim-lines'))map.getSource('anim-lines').setData(emptyFC()); }
+function clearAnimLines()    { animFeatures=[];animCircleCount=0;animCircleData=[]; if(map.getSource('intro-lines'))map.getSource('intro-lines').setData(emptyFC()); }
 
 // ── Reveal scan animation ──────────────────────────────────────────────────────
 let scanTimer = null, scanFadeTimer = null, scanMsgTimer = null;
@@ -594,16 +604,19 @@ function beginReveal() {
   document.getElementById('rev-numbers').style.visibility = 'visible';
   showRevealedCircles();
   scanFadeTimer = setTimeout(clearScanLine, 5000);
-  // Fade scan-msg out over 5s to match the scan-line fade, then hide it.
-  const msgEl = document.getElementById('scan-msg');
-  msgEl.style.transition = 'opacity 5s';
-  msgEl.style.opacity = '0';
-  scanMsgTimer = setTimeout(() => {
-    msgEl.style.display = 'none';
-    msgEl.style.transition = '';
-    msgEl.style.opacity = '';
-    scanMsgTimer = null;
-  }, 5000);
+  // On desktop: fade scan-msg out over 5s to match the scan-line fade, then hide it.
+  // On mobile: leave it visible — the absolute numbers appear below it and there is room.
+  if (!isMobile()) {
+    const msgEl = document.getElementById('scan-msg');
+    msgEl.style.transition = 'opacity 5s';
+    msgEl.style.opacity = '0';
+    scanMsgTimer = setTimeout(() => {
+      msgEl.style.display = 'none';
+      msgEl.style.transition = '';
+      msgEl.style.opacity = '';
+      scanMsgTimer = null;
+    }, 5000);
+  }
 }
 function stopScan() {
   if (scanTimer)    { clearInterval(scanTimer); scanTimer = null; }
@@ -743,6 +756,7 @@ function clearExplorer() {
   explorerPoints=[null,null];
   explorerMarkers.forEach(m=>m&&m.remove()); explorerMarkers=[null,null];
   explorerClickCount=0;
+  markerJustDragged=false;
 }
 function saveUndo() { undoStack.push(explorerPoints.map(p=>p?{...p}:null)); }
 function restoreUndo(snap) {
@@ -977,14 +991,14 @@ function setupAllLayers() {
   map.addLayer({id:'grid',type:'line',source:'grid',paint:{'line-color':'#000','line-width':0.5,'line-opacity':['interpolate',['linear'],['zoom'],8,0,9,0.35]}});
 
   // animation circles
-  map.addSource('anim-lines',{type:'geojson',data:emptyFC()});
-  map.addLayer({id:'anim-lines',type:'line',source:'anim-lines',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':['get','color'],'line-width':2.5,'line-opacity':0.7}});
+  map.addSource('intro-lines',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'intro-lines',type:'line',source:'intro-lines',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':['get','color'],'line-width':2.5,'line-opacity':0.7}});
 
   // reveal scan (single flashing circle)
   map.addSource('scan-line',{type:'geojson',data:emptyFC()});
   map.addLayer({id:'scan-line',type:'line',source:'scan-line',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#888','line-width':1.5,'line-opacity':0.6}});
 
-  // selected circle in examine mode (2× thickness of anim-lines)
+  // selected circle in examine mode (2× thickness of intro-lines)
   map.addSource('selected-circle',{type:'geojson',data:emptyFC()});
   map.addLayer({id:'selected-line',type:'line',source:'selected-circle',layout:{'line-cap':'round','line-join':'round'},
     paint:{'line-color':['get','color'],'line-width':5,'line-opacity':1.0}});
@@ -1090,7 +1104,7 @@ map.once('load',()=>{
 
   map.on('click',e=>{
     if (appState==='loading') return;
-    if (appState==='animation') { enterState('examine'); handleExamineClick(e); return; }
+    if (appState==='intro') { enterState('examine'); handleExamineClick(e); return; }
     if (appState==='examine')   { handleExamineClick(e); return; }
     if (appState==='explorer') {
       if (e.originalEvent._handled) return;
@@ -1116,7 +1130,7 @@ map.once('load',()=>{
   map.getCanvas().addEventListener('touchstart', () => { spinPaused = true; }, {passive:true});
   document.addEventListener('mouseup',  () => { spinPaused = false; });
   document.addEventListener('touchend', () => { spinPaused = false; });
-  map.on('dragstart', () => { if (appState==='animation') enterState('examine'); });
+  map.on('dragstart', () => { if (appState==='intro') enterState('examine'); });
 });
 
 // ── Explorer click ────────────────────────────────────────────────────────────
@@ -1206,7 +1220,18 @@ function clearSelectedCircle() {
 }
 
 // ── Button handlers ───────────────────────────────────────────────────────────
-document.getElementById('logo-panel').addEventListener('click',()=>{ if(appState!=='loading') enterState('animation'); });
+function prevState(s) {
+  if (s === 'revealed' || s === 'detailed') return 'explorer';
+  if (s === 'explorer') return 'intro';
+  if (s === 'examine')  return 'intro';
+  return null;
+}
+document.getElementById('logo-panel').addEventListener('click', e => { if(appState!=='loading') enterState('intro'); });
+document.getElementById('prev-btn').addEventListener('click', e => {
+  e.stopPropagation();  // don't also fire logo-panel click
+  const p = prevState(appState);
+  if (p) enterState(p);
+});
 document.getElementById('try-btn').addEventListener('click',()=>{ if(appState==='examine') enterState('explorer'); });
 document.getElementById('reveal-btn').addEventListener('click',()=>{ if(appState==='explorer') enterState('revealed'); });
 document.getElementById('details-btn').addEventListener('click',()=>{

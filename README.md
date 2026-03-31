@@ -109,16 +109,17 @@ python3 -m http.server 8000  # from repo root
 
 ## Visualisation
 
-The web page (`index.html`) is a guided experience with four phases:
+The web page (`index.html`) is a guided experience with five states:
 
-1. **Animation** — the globe spins and random great circles accumulate, each coloured by land (red) and ocean (blue). Click any circle to see its land/ocean split.
-2. **Examine** — click a circle to highlight it and see its percentage. Click again for context; a button invites you to try your own.
-3. **Explorer** — place two points on the globe to define a great circle; the land/ocean split updates live as you drag the points. A Reveal button appears once data is ready.
-4. **Revealed** — the computed wettest and driest circles are drawn. A Details panel (desktop only) shows fine-search heatmaps and coarse top-10 candidates.
+1. **Intro** — the globe spins and random great circles accumulate, each coloured by land (red) and ocean (blue).
+2. **Examine** — click a circle to highlight it and see its land/ocean percentage. A button invites you to try your own.
+3. **Explorer** — place two points on the globe to define a great circle; the land/ocean split updates live as you drag the points. After two circles the wettest and driest you have found are tracked. A Reveal button appears once data is ready.
+4. **Revealed** — an animation of 100 sampled great circles sweeps the globe, then fades to reveal the computed absolute wettest and driest circles.
+5. **Detailed** — a Details panel (desktop only) expands below the results showing fine-search heatmaps and coarse top-10 candidates.
 
 **Map features:**
 - Globe projection with atmosphere and fog
-- Fine best great circles shown in the Revealed phase; coarse top-10 toggleable in Details
+- Fine best great circles shown in Revealed/Detailed; coarse top-10 toggleable in Details
 - Lines grow in width with zoom; fine best lines represent the ~10 km positional uncertainty band
 
 **Fine search heatmaps** (Details panel, desktop only):
@@ -130,8 +131,27 @@ The web page (`index.html`) is a guided experience with four phases:
 - `+` symbols mark both poles of each winning circle's axis
 
 **Mobile layout:**
-- Card appears below the globe showing contextual text for each phase
+- Card appears below the globe showing contextual text for each state
 - Details panel and heatmaps require a larger screen
+
+## App state navigation
+
+The app progresses forward through states and can step back with the ←Previous link (top-left, below the logo).
+
+```
+loading → intro → examine → explorer → revealed ↔ detailed
+```
+
+| From | Forward | Back (←Previous) |
+|---|---|---|
+| `loading` | → `intro` (automatic, when mask loads) | — |
+| `intro` | → `examine` (click or drag on globe) | — |
+| `examine` | → `explorer` (Make your own button) | → `intro` |
+| `explorer` | → `revealed` (Absolute Wettest and Driest button) | → `intro` |
+| `revealed` | → `detailed` (Details button) | → `explorer` |
+| `detailed` | → `revealed` (Hide Details button) | → `explorer` |
+
+The logo always returns to `intro` from any state. The `detailed` state is a panel overlay on top of `revealed`; the Details/Hide Details button toggles between them without back-navigation semantics.
 
 ## Uncertainty
 
