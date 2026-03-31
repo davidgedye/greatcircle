@@ -1,11 +1,11 @@
-const CACHE_NAME = 'greatcircle-v38';
+const CACHE_NAME = 'greatcircle-v39';
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll([
       '/greatcircle/',
       '/greatcircle/index.html',
-      '/greatcircle/explorer/mask_60s.bin.gz',
+      '/greatcircle/mask_60s.bin.gz',
     ]))
   );
   self.skipWaiting();

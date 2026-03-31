@@ -306,23 +306,8 @@ function onStateEnter(s, prev) {
     map.easeTo({ zoom:animZoom(), pitch:0, bearing:0, duration:800, padding:getMapPadding() });
   }
   if (s === 'revealed') {
-    if (prev === 'explorer') {
-      startRevealScan(() => {
-        map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 2000, delay: 0 });
-        map.setPaintProperty('scan-line', 'line-opacity', 0);
-        map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:2000, padding:getMapPadding() });
-        document.getElementById('rev-numbers').style.visibility = 'visible';
-        showRevealedCircles();
-        scanFadeTimer = setTimeout(() => {
-          scanFadeTimer = null;
-          if (map.getSource('scan-line')) {
-            map.getSource('scan-line').setData(emptyFC());
-            map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 0, delay: 0 });
-            map.setPaintProperty('scan-line', 'line-opacity', 0.6);
-          }
-        }, 2000);
-      });
-    } else {
+    if (prev === 'explorer') { startRevealScan(beginReveal); }
+    else {
       map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:1800, padding:getMapPadding() });
       showRevealedCircles();
     }
@@ -347,7 +332,7 @@ function reapplyCurrentState() {
 // ── Mask ──────────────────────────────────────────────────────────────────────
 async function loadMask() {
   try {
-    const resp = await fetch('explorer/mask_60s.bin.gz');
+    const resp = await fetch('mask_60s.bin.gz');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     mask = new Uint8Array(await new Response(resp.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
     maskReady = true;
@@ -434,15 +419,20 @@ function perturbNormal(n0,p) {
   const proj=vsub(n0,vscale(p,dot(n0,p)));
   return dot(proj,proj)<1e-12?null:vnorm(proj);
 }
-function gcCoords(n,nPts=3600) {
-  const ref=Math.abs(n[0])<0.9?[1,0,0]:[0,1,0];
-  const u=vnorm(vcross(n,ref)), v=vcross(n,u);
-  const raw=[];
-  for (let i=0;i<nPts;i++) {
-    const t=2*Math.PI*i/nPts;
-    raw.push([Math.atan2(Math.cos(t)*u[1]+Math.sin(t)*v[1], Math.cos(t)*u[0]+Math.sin(t)*v[0])*180/Math.PI,
-              Math.asin(Math.max(-1,Math.min(1,Math.cos(t)*u[2]+Math.sin(t)*v[2])))*180/Math.PI]);
+// Shared inner loop: build nPts evenly-spaced [lon,lat] pairs along great circle n.
+function gcLonLatPts(n, nPts) {
+  const ref = Math.abs(n[0]) < 0.9 ? [1,0,0] : [0,1,0];
+  const u = vnorm(vcross(n, ref)), v = vcross(n, u);
+  const pts = [];
+  for (let i = 0; i < nPts; i++) {
+    const t = 2*Math.PI*i/nPts, ct = Math.cos(t), st = Math.sin(t);
+    pts.push([Math.atan2(ct*u[1]+st*v[1], ct*u[0]+st*v[0]) * 180/Math.PI,
+              Math.asin(Math.max(-1, Math.min(1, ct*u[2]+st*v[2]))) * 180/Math.PI]);
   }
+  return pts;
+}
+function gcCoords(n,nPts=3600) {
+  const raw = gcLonLatPts(n, nPts);
   raw.push(raw[0]);
   const out=[raw[0]];
   for (let i=1;i<raw.length;i++) {
@@ -569,14 +559,26 @@ function clearAnimLines()    { animFeatures=[];animCircleCount=0;animCircleData=
 
 // ── Reveal scan animation ──────────────────────────────────────────────────────
 let scanTimer = null, scanFadeTimer = null;
+function clearScanLine() {
+  scanFadeTimer = null;
+  if (map.getSource('scan-line')) {
+    map.getSource('scan-line').setData(emptyFC());
+    map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 0, delay: 0 });
+    map.setPaintProperty('scan-line', 'line-opacity', 0.6);
+  }
+}
+function beginReveal() {
+  map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 2000, delay: 0 });
+  map.setPaintProperty('scan-line', 'line-opacity', 0);
+  map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:2000, padding:getMapPadding() });
+  document.getElementById('rev-numbers').style.visibility = 'visible';
+  showRevealedCircles();
+  scanFadeTimer = setTimeout(clearScanLine, 2000);
+}
 function stopScan() {
   if (scanTimer)     { clearInterval(scanTimer); scanTimer = null; }
   if (scanFadeTimer) { clearTimeout(scanFadeTimer); scanFadeTimer = null; }
-  if (map.getSource('scan-line')) {
-    map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 0, delay: 0 });
-    map.setPaintProperty('scan-line', 'line-opacity', 0.6);
-    map.getSource('scan-line').setData(emptyFC());
-  }
+  clearScanLine();
   document.getElementById('scan-msg').style.display = 'none';
   document.getElementById('rev-numbers').style.visibility = 'visible';
 }
@@ -745,14 +747,7 @@ function refreshFineSegments() {
     const {theta,phi}=fc.features[0].properties||{};
     if (theta==null) return;
     const nVec=thetaPhiToNormal(theta,phi);
-    const ref=Math.abs(nVec[0])<0.9?[1,0,0]:[0,1,0];
-    const u=vnorm(vcross(nVec,ref)), v=vcross(nVec,u);
-    const pts=[];
-    for (let i=0;i<TRANSITION_PTS;i++) {
-      const t=2*Math.PI*i/TRANSITION_PTS;
-      pts.push([Math.atan2(Math.cos(t)*u[1]+Math.sin(t)*v[1],Math.cos(t)*u[0]+Math.sin(t)*v[0])*180/Math.PI,
-                Math.asin(Math.max(-1,Math.min(1,Math.cos(t)*u[2]+Math.sin(t)*v[2])))*180/Math.PI]);
-    }
+    const pts=gcLonLatPts(nVec, TRANSITION_PTS);
     features.push(...buildSegmentFeatures(pts,step,key===DRY()));
   });
   map.getSource('fine-segments').setData({type:'FeatureCollection',features});
@@ -770,14 +765,7 @@ function refreshCoarseSegments() {
     fc.features.forEach((f,fi)=>{
       const{theta,phi,ocean_pct}=f.properties||{}; if(theta==null) return;
       const nVec=thetaPhiToNormal(theta,phi);
-      const ref=Math.abs(nVec[0])<0.9?[1,0,0]:[0,1,0];
-      const u=vnorm(vcross(nVec,ref)), v=vcross(nVec,u);
-      const pts=[];
-      for(let i=0;i<COARSE_TRANSITION_PTS;i++) {
-        const t=2*Math.PI*i/COARSE_TRANSITION_PTS;
-        pts.push([Math.atan2(Math.cos(t)*u[1]+Math.sin(t)*v[1],Math.cos(t)*u[0]+Math.sin(t)*v[0])*180/Math.PI,
-                  Math.asin(Math.max(-1,Math.min(1,Math.cos(t)*u[2]+Math.sin(t)*v[2])))*180/Math.PI]);
-      }
+      const pts=gcLonLatPts(nVec, COARSE_TRANSITION_PTS);
       const segs=buildSegmentFeatures(pts,step,side==='dry');
       segs.forEach(s=>Object.assign(s.properties,{rank:fi+1,ocean_pct}));
       features.push(...segs);

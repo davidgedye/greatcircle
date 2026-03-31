@@ -64,6 +64,7 @@ The wettest circle tilts through the Indian Ocean, western Pacific and Arctic â€
 ```
 index.html                          Web visualisation (GitHub Pages root)
 about.html                          Renders README.md in-browser (linked from map)
+mask_60s.bin.gz                     1 arc-minute land/ocean mask (binary, gzip-compressed)
 sw.js                               Service worker (offline cache)
 manifest.json                       PWA manifest
 experiments/
