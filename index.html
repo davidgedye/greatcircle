@@ -112,7 +112,7 @@
       backdrop-filter: blur(6px); z-index: 10;
     }
     body.state-detailed #details-panel { display: flex; }
-    #toggles { display: flex; flex-direction: column; gap: 8px; }
+    #toggles { display: flex; flex-direction: column; gap: 8px; align-items: center; }
     .tog-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .tog-row input { cursor: pointer; margin: 0; accent-color: #aaa; }
     .tog-swatch { width: 26px; height: 3px; border-radius: 1px; flex-shrink: 0; }
@@ -856,7 +856,7 @@ function renderHeatmaps() {
   if (!FINE_GRIDS) return;
   ACTIVE().forEach((key,i)=>{
     drawHeatmap('hm-'+i,FINE_GRIDS[key]);
-    document.getElementById('hm-'+i+'-label').textContent=i===0?'WETTEST':'DRIEST';
+    document.getElementById('hm-'+i+'-label').textContent=i===0?'AROUND WETTEST (COARSE)':'AROUND DRIEST (COARSE)';
     updatePctEl(i,key,undefined);
   });
 }
