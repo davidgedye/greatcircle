@@ -45,6 +45,9 @@
     #exp-cur-ocean, #exp-wet-val, #rev-wet-pct { color: #00e5ff; }
     #exp-cur-land, #exp-dry-val, #rev-dry-pct { color: #ff1744; }
 
+    /* Prevent scan-msg from widening the card; card width is set by the nowrap rev-numbers lines */
+    #scan-msg { contain: inline-size; }
+
     #about-link { color: #888; font-size: 0.85em; text-decoration: underline; }
     #about-link:hover { color: #ccc; }
 
@@ -70,6 +73,8 @@
         padding: 28px; font-size: min(2.2vh, 20px);
       }
       body.state-detailed #message-card { top: 12px; transform: none; }
+      body.state-revealed #message-card,
+      body.state-detailed #message-card { width: max-content; max-width: 42vw; }
       .msg-mobile { display: none; }
     }
 
@@ -96,7 +101,7 @@
     /* ── Details panel (desktop / landscape only) ───────────────────── */
     #details-panel {
       display: none; position: absolute;
-      right: 24px; top: 160px; bottom: 12px;
+      right: 24px; top: 240px; bottom: 12px;
       width: max(200px, calc(50vw - 40vh - 36px));
       overflow-y: auto;
       background: rgba(8,8,8,0.88); border: 1px solid #2a2a2a;
