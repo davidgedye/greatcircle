@@ -40,10 +40,9 @@
     @media (orientation: landscape) {
       #exp-records { margin-top: 16px; white-space: nowrap; }
     }
-    #exp-cur-ocean, #exp-wet-val { color: #00e5ff; }
-    #exp-cur-land, #exp-dry-val { color: #ff1744; }
-    .rev-item { display: flex; align-items: baseline; gap: 8px; }
-    .rev-dot { font-size: 1.2em; }
+    #exp-cur-ocean, #exp-wet-val, #rev-wet-pct { color: #00e5ff; }
+    #exp-cur-land, #exp-dry-val, #rev-dry-pct { color: #ff1744; }
+
     #about-link { color: #888; font-size: 0.85em; text-decoration: underline; }
     #about-link:hover { color: #ccc; }
 
@@ -177,14 +176,8 @@
 
   <!-- Reveal / Detailed -->
   <div id="card-reveal" class="card-section">
-    <div class="rev-item">
-      <span class="rev-dot" style="color:#00e5ff">●</span>
-      <span style="color:#00e5ff">Wettest <strong id="rev-wet-pct">–</strong></span>
-    </div>
-    <div class="rev-item">
-      <span class="rev-dot" style="color:#ff1744">●</span>
-      <span style="color:#ff1744">Driest <strong id="rev-dry-pct">–</strong></span>
-    </div>
+    <div>Absolute wettest: <strong id="rev-wet-pct">–</strong></div>
+    <div>Absolute driest: <strong id="rev-dry-pct">–</strong></div>
     <a href="about.html" target="_blank" id="about-link">How I calculated this</a>
     <button id="details-btn">Details</button>
   </div>
@@ -256,10 +249,11 @@ const emptyFC   = () => ({ type: 'FeatureCollection', features: [] });
 
 // ── State machine ─────────────────────────────────────────────────────────────
 function enterState(s) {
+  const prev = appState;
   onStateExit(appState);
   appState = s;
   document.body.className = 'state-' + s;
-  onStateEnter(s);
+  onStateEnter(s, prev);
 }
 
 function showCard(sectionId) {
@@ -277,9 +271,14 @@ function onStateExit(s) {
   if (s === 'animation') { stopSpinning(); stopAnimInterval(); animDone = false; }
   if (s === 'examine')   { clearAnimLines(); clearSelectedCircle(); }
   if (s === 'explorer')  { clearExplorer(); resetExpRecords(); }
+  if (s === 'revealed' || s === 'detailed') {
+    stopScan();
+    if (map.getLayer('fine-segments')) map.setLayoutProperty('fine-segments', 'visibility', 'none');
+    if (map.getLayer('poles'))         map.setLayoutProperty('poles',         'visibility', 'none');
+  }
 }
 
-function onStateEnter(s) {
+function onStateEnter(s, prev) {
   if (s === 'loading')                          showCard(null);
   if (s === 'animation')                        showCard('card-anim1');
   if (s === 'examine')                          showCard(isMobile() ? 'card-anim2' : 'card-anim1');
@@ -302,7 +301,8 @@ function onStateEnter(s) {
   }
   if (s === 'revealed') {
     map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:1800, padding:getMapPadding() });
-    showRevealedCircles();
+    if (prev === 'explorer') startRevealScan(() => showRevealedCircles());
+    else showRevealedCircles();
   }
   if (s === 'detailed') showRevealedCircles();
   if (s === 'detailed' && !isMobile()) loadAndApplyDetails();
@@ -543,6 +543,37 @@ function addAnimCircle() {
 function startAnimInterval() { addAnimCircle(); animInterval=setInterval(()=>{if(appState==='animation')addAnimCircle();},500); }
 function stopAnimInterval()  { if(animInterval){clearInterval(animInterval);animInterval=null;} }
 function clearAnimLines()    { animFeatures=[];animCircleCount=0;animCircleData=[]; if(map.getSource('anim-lines'))map.getSource('anim-lines').setData(emptyFC()); }
+
+// ── Reveal scan animation ──────────────────────────────────────────────────────
+let scanTimer = null;
+function stopScan() {
+  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  if (map.getSource('scan-line')) map.getSource('scan-line').setData(emptyFC());
+}
+function startRevealScan(onComplete) {
+  // Step through the 180×180 coarse grid at stride 18 → 10×10 = 100 points spanning the full space.
+  // Parameterisation matches the actual search: cos θ uniform in [-1,1], φ uniform in [0,π].
+  const N = 180, STRIDE = 18;
+  const grid = [];
+  for (let i = 0; i < N; i += STRIDE) {
+    const cosT = -1 + (i + 0.5) * 2 / N;
+    const sinT = Math.sqrt(1 - cosT * cosT);
+    for (let j = 0; j < N; j += STRIDE) {
+      const ph = (j + 0.5) * Math.PI / N;
+      grid.push([sinT * Math.cos(ph), sinT * Math.sin(ph), cosT]);
+    }
+  }
+  let idx = 0;
+  scanTimer = setInterval(() => {
+    if (idx >= grid.length) { stopScan(); onComplete(); return; }
+    const normal = grid[idx++];
+    const pts = sampleGC(normal, 360);
+    const features = splitAtAntimeridian(pts.map(p => [p.lon, p.lat]))
+      .map(s => ({ type:'Feature', geometry:{type:'LineString', coordinates:s}, properties:{} }));
+    if (map.getSource('scan-line'))
+      map.getSource('scan-line').setData({ type:'FeatureCollection', features });
+  }, 100);
+}
 
 // ── Explorer subsystem ────────────────────────────────────────────────────────
 // If land ≥ 50% report as land fraction, otherwise as ocean fraction.
@@ -875,6 +906,10 @@ function setupAllLayers() {
   // animation circles
   map.addSource('anim-lines',{type:'geojson',data:emptyFC()});
   map.addLayer({id:'anim-lines',type:'line',source:'anim-lines',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':['get','color'],'line-width':2.5,'line-opacity':0.7}});
+
+  // reveal scan (single flashing circle)
+  map.addSource('scan-line',{type:'geojson',data:emptyFC()});
+  map.addLayer({id:'scan-line',type:'line',source:'scan-line',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#888','line-width':1.5,'line-opacity':0.6}});
 
   // selected circle in examine mode (2× thickness of anim-lines)
   map.addSource('selected-circle',{type:'geojson',data:emptyFC()});
