@@ -33,6 +33,8 @@
     }
     .card-section { display: none; flex-direction: column; gap: 14px; }
     .card-big-pct { font-size: 2em; font-weight: bold; color: #fff; }
+    #card-examine.first-click .examine-full { display: none; }
+    #card-examine:not(.first-click) #examine-try-another { display: none; }
     #exp-records { display: flex; flex-direction: column; gap: 6px; }
     #exp-records.dimmed { opacity: 0.35; pointer-events: none; }
     .rev-item { display: flex; align-items: baseline; gap: 8px; }
@@ -76,6 +78,12 @@
       .msg-desktop { display: none; }
       #details-btn { display: none !important; }
       .card-big-pct { text-align: center; }
+      #examine-try-another { text-align: center; }
+      #message-card .card-section { align-items: center; }
+      #message-card .card-section > * { max-width: 100%; }
+      #card-explorer.no-points #exp-records,
+      #card-explorer.no-points #reveal-btn { display: none; }
+      #card-explorer:not(.no-points) .msg-mobile { display: none; }
     }
 
     /* ── Details panel (desktop / landscape only) ───────────────────── */
@@ -145,8 +153,9 @@
   <!-- Examine: circle selected -->
   <div id="card-examine" class="card-section">
     <div id="exam-pct" class="card-big-pct"></div>
-    <div class="msg-desktop">I wanted to know what the limits were. Was there any great circle that was at least 90% ocean? (Spoiler: yes). What about 50% land?</div>
-    <button id="try-btn">Make your own Great Circle</button>
+    <div id="examine-try-another">Try another</div>
+    <div class="examine-full msg-desktop">I wanted to know what the limits were. Was there any great circle that was at least 90% ocean? (Spoiler: yes). What about 50% land?</div>
+    <button id="try-btn" class="examine-full">Make your own Great Circle</button>
   </div>
 
   <!-- Explorer -->
@@ -232,7 +241,7 @@ const undoStack = [];
 
 // Animation
 let animRAF = null, animInterval = null, animCircleCount = 0, animFeatures = [], animCircleData = [];
-let lastAnimPct = '', animDone = false;
+let lastAnimPct = '', animDone = false, examineClicks = 0;
 
 // Explorer best records
 let bestWetFrac = null, bestDryFrac = null;
@@ -277,10 +286,12 @@ function onStateEnter(s) {
     startSpinning(); startAnimInterval();
   }
   if (s === 'examine') {
+    examineClicks = 0;
     clearSelectedCircle();
     map.getCanvas().style.cursor = '';
   }
   if (s === 'explorer') {
+    document.getElementById('card-explorer').classList.add('no-points');
     map.getCanvas().style.cursor = 'crosshair';
     map.easeTo({ center:[0,0], zoom:animZoom(), pitch:0, bearing:0, duration:800, padding:getMapPadding() });
   }
@@ -295,7 +306,9 @@ function onStateEnter(s) {
 function reapplyCurrentState() {
   if ((appState === 'animation' || appState === 'examine') && map.getSource('anim-lines') && animFeatures.length)
     map.getSource('anim-lines').setData({ type:'FeatureCollection', features: animFeatures });
-  if (appState === 'explorer' && explorerPoints[0] && explorerPoints[1]) computeAndDraw();
+  if (appState === 'explorer') {
+    if (explorerPoints[0] && explorerPoints[1]) computeAndDraw();
+  }
   if (appState === 'revealed' || appState === 'detailed') {
     showRevealedCircles();
     if (appState === 'detailed' && !isMobile()) loadAndApplyDetails();
@@ -432,15 +445,16 @@ function interpGrid(gd,tDeg,pDeg) {
 // ── Segment builders ──────────────────────────────────────────────────────────
 // Explorer/animation: input [{lat,lon},...], full cyan/red coloring
 function buildExplorerSegments(pts, displayStep, circleIdx) {
+  const oceanColor=COLOR_OCEAN, landColor=COLOR_LAND;
   if (pts.length<2) return [];
   const features=[]; let segStart=0, segLand=isLand(pts[0].lat,pts[0].lon);
   const extra = (circleIdx != null) ? {circleIdx} : {};
   function flush(endIdx) {
     if (endIdx-segStart<1) return;
+    const color=segLand?landColor:oceanColor;
     const coords=[];
     for (let j=segStart;j<=endIdx;j+=displayStep) coords.push([pts[j].lon,pts[j].lat]);
     if (coords[coords.length-1]!==pts[endIdx]) coords.push([pts[endIdx].lon,pts[endIdx].lat]);
-    const color=segLand?COLOR_LAND:COLOR_OCEAN;
     for (const seg of splitAtAntimeridian(coords))
       features.push({type:'Feature',geometry:{type:'LineString',coordinates:seg},properties:{color,...extra}});
   }
@@ -585,6 +599,8 @@ function drawFast() {
   const [A,B]=explorerPoints; if(!A||!B) return;
   const allPts=sampleGC(gcNormal(A.lat,A.lon,B.lat,B.lon),TRANSITION_PTS);
   const pts=subsample(allPts,DISPLAY_PTS);
+  let lc=0; for(const p of pts) lc+=isLand(p.lat,p.lon);
+  updateExpRecords((1-lc/pts.length)*100);
   map.getSource('gc-line').setData({type:'FeatureCollection',
     features:splitAtAntimeridian(pts.map(p=>[p.lon,p.lat])).map(s=>({type:'Feature',geometry:{type:'LineString',coordinates:s},properties:{color:COLOR_DRAG}}))});
 }
@@ -849,7 +865,7 @@ function setupAllLayers() {
   map.addLayer({id:'selected-line',type:'line',source:'selected-circle',layout:{'line-cap':'round','line-join':'round'},
     paint:{'line-color':['get','color'],'line-width':5,'line-opacity':1.0}});
 
-  // explorer: main + highlight
+  // explorer: current circle
   map.addSource('gc-line',{type:'geojson',data:emptyFC()});
   map.addLayer({id:'gc-line',type:'line',source:'gc-line',layout:{'line-cap':'round','line-join':'round'},
     paint:{'line-color':['get','color'],'line-width':['interpolate',['exponential',2],['zoom'],0,1.5,5,2.5,10,7],'line-opacity':0.88}});
@@ -984,6 +1000,7 @@ function handleExpClick(e) {
   const {lat,lng:lon}=e.lngLat; if(!isFinite(lat)||!isFinite(lon)) return;
   saveUndo();
   const idx=explorerClickCount%2; explorerClickCount++;
+  if (explorerClickCount >= 2) document.getElementById('card-explorer').classList.remove('no-points');
   placeMarker(idx,lat,lon);
   if (explorerPoints[0]&&explorerPoints[1]) computeAndDraw();
 }
@@ -1052,6 +1069,10 @@ function handleExamineClick(e) {
   const features = buildExplorerSegments(allPts, step);
   if (map.getSource('selected-circle'))
     map.getSource('selected-circle').setData({type:'FeatureCollection', features});
+  examineClicks++;
+  const card = document.getElementById('card-examine');
+  if (examineClicks === 1) card.classList.add('first-click');
+  else card.classList.remove('first-click');
   showCard('card-examine');
 }
 function clearSelectedCircle() {
