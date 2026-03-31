@@ -36,17 +36,24 @@
     #card-examine.first-click .examine-full { display: none; }
     #card-examine:not(.first-click) #examine-try-another { display: none; }
     #exp-records { display: flex; flex-direction: column; gap: 6px; }
-    #exp-records.dimmed { opacity: 0.35; pointer-events: none; }
+    #exp-records.dimmed { display: none; }
+    #exp-wet-row, #exp-dry-row { display: none; }
+    #exp-records.has-records #exp-hint { display: none; }
+    #exp-records.has-records #exp-wet-row,
+    #exp-records.has-records #exp-dry-row { display: block; }
     @media (orientation: landscape) {
       #exp-records { margin-top: 16px; white-space: nowrap; }
+      #exp-hint { white-space: normal; }
       #exp-wet-row { margin-top: 1em; }
       #rev-numbers { white-space: nowrap; }
     }
     #exp-cur-ocean, #exp-wet-val, #rev-wet-pct { color: #00e5ff; }
     #exp-cur-land, #exp-dry-val, #rev-dry-pct { color: #ff1744; }
 
-    /* Prevent scan-msg from widening the card; card width is set by the nowrap rev-numbers lines */
-    #scan-msg { contain: inline-size; }
+    /* Prevent scan-msg from widening the card; card width is set by the nowrap rev-numbers lines.
+       width:100% resolves to 0 in max-content sizing (CSS %-in-max-content rule) so it doesn't
+       push the card wider, but fills the actual card width in normal layout. */
+    #scan-msg { width: 100%; }
 
     #about-link { color: #888; font-size: 0.85em; text-decoration: underline; }
     #about-link:hover { color: #ccc; }
@@ -61,7 +68,7 @@
     }
     #try-btn:hover, #details-btn:hover { background: rgba(255,255,255,0.15); }
     #reveal-btn:hover:not(:disabled) { background: rgba(255,255,255,0.15); }
-    #reveal-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    #reveal-btn:disabled { display: none; }
 
     /* Desktop landscape: card right of globe, vertically centred */
     @media (orientation: landscape) {
@@ -89,8 +96,7 @@
       }
       .msg-desktop { display: none; }
       #details-btn { display: none !important; }
-      #scan-msg { display: none !important; }
-      body.scanning #message-card { display: none !important; }
+      body.scanning #about-link-mobile { display: none !important; }
       .card-big-pct { text-align: center; }
       #examine-try-another { text-align: center; }
       #message-card .card-section { align-items: center; }
@@ -178,8 +184,9 @@
     <div class="msg-mobile">Click on two points to specify a great circle.</div>
     <div id="exp-records" class="dimmed">
       <div><strong id="exp-cur-ocean">–</strong> / <strong id="exp-cur-land">–</strong></div>
+      <div id="exp-hint">Try another by clicking again, or dragging a point</div>
       <div id="exp-wet-row">Your wettest: <strong id="exp-wet-val">–</strong></div>
-      <div>Your driest: <strong id="exp-dry-val">–</strong></div>
+      <div id="exp-dry-row">Your driest: <strong id="exp-dry-val">–</strong></div>
     </div>
     <button id="reveal-btn" disabled>Absolute Wettest and Driest</button>
   </div>
@@ -257,7 +264,7 @@ let animRAF = null, animInterval = null, animCircleCount = 0, animFeatures = [],
 let lastAnimPct = '', animDone = false, examineClicks = 0;
 
 // Explorer best records
-let bestWetFrac = null, bestDryFrac = null;
+let bestWetFrac = null, bestDryFrac = null, expCircleCount = 0;
 
 const isMobile  = () => window.matchMedia('(max-width:640px)').matches;
 const emptyFC   = () => ({ type: 'FeatureCollection', features: [] });
@@ -570,7 +577,7 @@ function stopAnimInterval()  { if(animInterval){clearInterval(animInterval);anim
 function clearAnimLines()    { animFeatures=[];animCircleCount=0;animCircleData=[]; if(map.getSource('anim-lines'))map.getSource('anim-lines').setData(emptyFC()); }
 
 // ── Reveal scan animation ──────────────────────────────────────────────────────
-let scanTimer = null, scanFadeTimer = null;
+let scanTimer = null, scanFadeTimer = null, scanMsgTimer = null;
 function clearScanLine() {
   scanFadeTimer = null;
   if (map.getSource('scan-line')) {
@@ -587,13 +594,27 @@ function beginReveal() {
   document.getElementById('rev-numbers').style.visibility = 'visible';
   showRevealedCircles();
   scanFadeTimer = setTimeout(clearScanLine, 5000);
+  // Fade scan-msg out over 5s to match the scan-line fade, then hide it.
+  const msgEl = document.getElementById('scan-msg');
+  msgEl.style.transition = 'opacity 5s';
+  msgEl.style.opacity = '0';
+  scanMsgTimer = setTimeout(() => {
+    msgEl.style.display = 'none';
+    msgEl.style.transition = '';
+    msgEl.style.opacity = '';
+    scanMsgTimer = null;
+  }, 5000);
 }
 function stopScan() {
-  if (scanTimer)     { clearInterval(scanTimer); scanTimer = null; }
-  if (scanFadeTimer) { clearTimeout(scanFadeTimer); scanFadeTimer = null; }
+  if (scanTimer)    { clearInterval(scanTimer); scanTimer = null; }
+  if (scanFadeTimer){ clearTimeout(scanFadeTimer); scanFadeTimer = null; }
+  if (scanMsgTimer) { clearTimeout(scanMsgTimer); scanMsgTimer = null; }
   clearScanLine();
   document.body.classList.remove('scanning');
-  document.getElementById('scan-msg').style.display = 'none';
+  const msgEl = document.getElementById('scan-msg');
+  msgEl.style.transition = '';
+  msgEl.style.opacity = '';
+  msgEl.style.display = 'none';
   document.getElementById('rev-numbers').style.visibility = 'visible';
 }
 function startRevealScan(onComplete) {
@@ -603,7 +624,10 @@ function startRevealScan(onComplete) {
     map.setPaintProperty('scan-line', 'line-opacity-transition', { duration: 0, delay: 0 });
     map.setPaintProperty('scan-line', 'line-opacity', 0.6);
   }
-  document.getElementById('scan-msg').style.display = '';
+  const msgEl = document.getElementById('scan-msg');
+  msgEl.style.transition = '';
+  msgEl.style.opacity = '';
+  msgEl.style.display = '';
   document.getElementById('rev-numbers').style.visibility = 'hidden';
   // 100 uniformly random great-circle normals via Marsaglia sphere sampling.
   const grid = [];
@@ -646,6 +670,7 @@ function updateCurCircle(oceanFrac) {
   document.getElementById('exp-records').classList.remove('dimmed');
 }
 function updateExpRecords(oceanFrac) {
+  expCircleCount++;
   if (bestWetFrac === null || oceanFrac > bestWetFrac) {
     bestWetFrac = oceanFrac;
     document.getElementById('exp-wet-val').textContent = bestWetFrac.toFixed(2) + '% ocean';
@@ -654,19 +679,21 @@ function updateExpRecords(oceanFrac) {
     bestDryFrac = oceanFrac;
     document.getElementById('exp-dry-val').textContent = (100 - bestDryFrac).toFixed(2) + '% land';
   }
+  if (expCircleCount >= 2) document.getElementById('exp-records').classList.add('has-records');
   updateCurCircle(oceanFrac);
   updateRevealBtn();
 }
 function resetExpRecords() {
-  bestWetFrac = null; bestDryFrac = null;
+  bestWetFrac = null; bestDryFrac = null; expCircleCount = 0;
   document.getElementById('exp-cur-ocean').textContent = '–';
   document.getElementById('exp-cur-land').textContent = '–';
   document.getElementById('exp-wet-val').textContent = '–';
   document.getElementById('exp-dry-val').textContent = '–';
   document.getElementById('exp-records').classList.add('dimmed');
+  document.getElementById('exp-records').classList.remove('has-records');
 }
 function updateRevealBtn() {
-  document.getElementById('reveal-btn').disabled = !(dataReady && bestWetFrac !== null);
+  document.getElementById('reveal-btn').disabled = !(dataReady && expCircleCount >= 2);
 }
 function makeMarker(idx) {
   const el=document.createElement('div');
