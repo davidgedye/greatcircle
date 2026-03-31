@@ -37,6 +37,11 @@
     #card-examine:not(.first-click) #examine-try-another { display: none; }
     #exp-records { display: flex; flex-direction: column; gap: 6px; }
     #exp-records.dimmed { opacity: 0.35; pointer-events: none; }
+    @media (orientation: landscape) {
+      #exp-records { margin-top: 16px; white-space: nowrap; }
+    }
+    #exp-cur-ocean, #exp-wet-val { color: #00e5ff; }
+    #exp-cur-land, #exp-dry-val { color: #ff1744; }
     .rev-item { display: flex; align-items: baseline; gap: 8px; }
     .rev-dot { font-size: 1.2em; }
     #about-link { color: #888; font-size: 0.85em; text-decoration: underline; }
@@ -163,11 +168,11 @@
     <div class="msg-desktop">Two points on the globe define a great circle, so click on two spots and see what you get. Try to find a circle that is more than 80% ocean. How about a really dry one?</div>
     <div class="msg-mobile">Click on two points to specify a great circle.</div>
     <div id="exp-records" class="dimmed">
-      <div>Your wettest so far: <strong id="exp-wet-val">–</strong></div>
-      <div>Your driest so far: <strong id="exp-dry-val">–</strong></div>
-      <div>Can you do better?</div>
+      <div><strong id="exp-cur-ocean">–</strong> / <strong id="exp-cur-land">–</strong></div>
+      <div>Your wettest: <strong id="exp-wet-val">–</strong></div>
+      <div>Your driest: <strong id="exp-dry-val">–</strong></div>
     </div>
-    <button id="reveal-btn" disabled>Show absolute wettest and driest</button>
+    <button id="reveal-btn" disabled>Absolute Wettest and Driest</button>
   </div>
 
   <!-- Reveal / Detailed -->
@@ -293,7 +298,7 @@ function onStateEnter(s) {
   if (s === 'explorer') {
     document.getElementById('card-explorer').classList.add('no-points');
     map.getCanvas().style.cursor = 'crosshair';
-    map.easeTo({ center:[0,0], zoom:animZoom(), pitch:0, bearing:0, duration:800, padding:getMapPadding() });
+    map.easeTo({ zoom:animZoom(), pitch:0, bearing:0, duration:800, padding:getMapPadding() });
   }
   if (s === 'revealed') {
     map.easeTo({ center:[134, -25], zoom:animZoom(), pitch:0, bearing:0, duration:1800, padding:getMapPadding() });
@@ -548,16 +553,27 @@ function fmtPct(oceanFrac) {
     : oceanFrac.toFixed(1) + '% ocean';
 }
 
-function updateExpRecords(oceanFrac) {
-  if (bestWetFrac === null || oceanFrac > bestWetFrac) bestWetFrac = oceanFrac;
-  if (bestDryFrac === null || oceanFrac < bestDryFrac) bestDryFrac = oceanFrac;
-  document.getElementById('exp-wet-val').textContent = bestWetFrac.toFixed(2) + '% ocean';
-  document.getElementById('exp-dry-val').textContent = (100 - bestDryFrac).toFixed(2) + '% land';
+function updateCurCircle(oceanFrac) {
+  document.getElementById('exp-cur-ocean').textContent = oceanFrac.toFixed(2) + '% ocean';
+  document.getElementById('exp-cur-land').textContent = (100 - oceanFrac).toFixed(2) + '% land';
   document.getElementById('exp-records').classList.remove('dimmed');
+}
+function updateExpRecords(oceanFrac) {
+  if (bestWetFrac === null || oceanFrac > bestWetFrac) {
+    bestWetFrac = oceanFrac;
+    document.getElementById('exp-wet-val').textContent = bestWetFrac.toFixed(2) + '% ocean';
+  }
+  if (bestDryFrac === null || oceanFrac < bestDryFrac) {
+    bestDryFrac = oceanFrac;
+    document.getElementById('exp-dry-val').textContent = (100 - bestDryFrac).toFixed(2) + '% land';
+  }
+  updateCurCircle(oceanFrac);
   updateRevealBtn();
 }
 function resetExpRecords() {
   bestWetFrac = null; bestDryFrac = null;
+  document.getElementById('exp-cur-ocean').textContent = '–';
+  document.getElementById('exp-cur-land').textContent = '–';
   document.getElementById('exp-wet-val').textContent = '–';
   document.getElementById('exp-dry-val').textContent = '–';
   document.getElementById('exp-records').classList.add('dimmed');
@@ -600,7 +616,7 @@ function drawFast() {
   const allPts=sampleGC(gcNormal(A.lat,A.lon,B.lat,B.lon),TRANSITION_PTS);
   const pts=subsample(allPts,DISPLAY_PTS);
   let lc=0; for(const p of pts) lc+=isLand(p.lat,p.lon);
-  updateExpRecords((1-lc/pts.length)*100);
+  updateCurCircle((1-lc/pts.length)*100);
   map.getSource('gc-line').setData({type:'FeatureCollection',
     features:splitAtAntimeridian(pts.map(p=>[p.lon,p.lat])).map(s=>({type:'Feature',geometry:{type:'LineString',coordinates:s},properties:{color:COLOR_DRAG}}))});
 }
