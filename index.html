@@ -602,19 +602,17 @@ function beginReveal() {
   document.getElementById('rev-numbers').style.visibility = 'visible';
   showRevealedCircles();
   scanFadeTimer = setTimeout(clearScanLine, 5000);
-  // On desktop: fade scan-msg out over 5s to match the scan-line fade, then hide it.
-  // On mobile: leave it visible — the absolute numbers appear below it and there is room.
-  if (!isMobile()) {
-    const msgEl = document.getElementById('scan-msg');
-    msgEl.style.transition = 'opacity 5s';
-    msgEl.style.opacity = '0';
-    scanMsgTimer = setTimeout(() => {
-      msgEl.style.display = 'none';
-      msgEl.style.transition = '';
-      msgEl.style.opacity = '';
-      scanMsgTimer = null;
-    }, 5000);
-  }
+  // Fade scan-msg out over 5s to match the scan-line fade, then hide it.
+  // On mobile this frees space for the absolute numbers and about link.
+  const msgEl = document.getElementById('scan-msg');
+  msgEl.style.transition = 'opacity 5s';
+  msgEl.style.opacity = '0';
+  scanMsgTimer = setTimeout(() => {
+    msgEl.style.display = 'none';
+    msgEl.style.transition = '';
+    msgEl.style.opacity = '';
+    scanMsgTimer = null;
+  }, 5000);
 }
 function stopScan() {
   if (scanTimer)    { clearInterval(scanTimer); scanTimer = null; }
