@@ -96,9 +96,9 @@
     /* Mobile portrait: card below globe, horizontally centred */
     @media (orientation: portrait) {
       #message-card {
-        bottom: 44px; left: 50%; transform: translateX(-50%);
+        bottom: 0; left: 50%; transform: translateX(-50%);
         width: calc(100vw - 32px);
-        max-height: max(120px, calc(50vh - 40vw - 20px));
+        max-height: max(120px, calc(50vh - 40vw + 24px));
         overflow-y: auto;
         padding: 16px; font-size: min(4.2vw, 17px);
       }
