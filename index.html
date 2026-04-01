@@ -169,13 +169,13 @@
 <div id="message-card">
 
   <!-- Animation phase 1 (desktop: combined message; mobile: message 1 only) -->
-  <div id="card-anim1" class="card-section">
-    <span class="msg-desktop"><p>A "great circle" is the closest thing to a straight line on a sphere. The equator is a great circle and so is every circle that goes through the poles.</p><p>&nbsp;</p><p>These lines show random great circles. Pan and zoom to see which parts are over water (in blue) and which over land (in red). Click on one and you'll see the exact percentage. Zoom in to see the details of the coastlines.</p></span>
-    <span class="msg-mobile">A "great circle" is the closest thing to a straight line on a sphere. The equator is a great circle and so is every circle that goes through the poles…</span>
+  <div id="card-intro1" class="card-section">
+    <span class="msg-desktop"><p>A great circle is a full diameter of the globe. The equator is a great circle and so is every circle that goes through the poles.</p><p>&nbsp;</p><p>These lines show random great circles. Pan and zoom to see which parts are over water (in blue) and which over land (in red). Click on one and you'll see the exact percentage. Zoom in to see the details of the coastlines.</p></span>
+    <span class="msg-mobile">A great circle is a full diameter of the globe. The equator is a great circle and so is every circle that goes through the poles.</span>
   </div>
 
   <!-- Animation phase 2 / pre-selection examine (mobile only) -->
-  <div id="card-anim2" class="card-section">
+  <div id="card-intro2" class="card-section">
     <span class="msg-mobile">Click on a great circle to see the percentage of land and ocean. Zoom in to see the details of the coastlines.</span>
   </div>
 
@@ -243,7 +243,7 @@ const MASK_NLAT = 10800, MASK_NLON = 21600;
 const DISPLAY_PTS = 1080;
 const TRANSITION_PTS = 21600;
 const COARSE_TRANSITION_PTS = 3600;
-const MAX_ANIM_CIRCLES = 10;
+const MAX_ANIM_CIRCLES = 13;
 
 const COLOR_OCEAN     = '#00bcd4';  // explorer/anim ocean segments
 const COLOR_LAND      = '#e53935';  // explorer/anim land segments
@@ -314,8 +314,8 @@ function onStateExit(s, next) {
 
 function onStateEnter(s, prev) {
   if (s === 'loading')                          showCard(null);
-  if (s === 'intro')                            showCard('card-anim1');
-  if (s === 'examine')                          showCard(isMobile() ? 'card-anim2' : 'card-anim1');
+  if (s === 'intro')                            showCard('card-intro1');
+  if (s === 'examine')                          showCard(isMobile() ? 'card-intro2' : 'card-intro1');
   if (s === 'explorer')                         showCard('card-explorer');
   if (s === 'revealed' || s === 'detailed')     showCard('card-reveal');
 
@@ -579,7 +579,7 @@ function addAnimCircle() {
   if (animCircleCount>=MAX_ANIM_CIRCLES) {
     stopAnimInterval();
     animDone = true;
-    if (appState === 'intro' && isMobile()) showCard('card-anim2');
+    if (appState === 'intro' && isMobile()) showCard('card-intro2');
   }
 }
 function startAnimInterval() { addAnimCircle(); animInterval=setInterval(()=>{if(appState==='intro')addAnimCircle();},500); }
