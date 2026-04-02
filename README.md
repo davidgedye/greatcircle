@@ -62,7 +62,7 @@ Level-1 search surfaces are saved to `etopo.json` for the details-panel heatmap 
 | **ETOPO 2022** | Wettest | 24.16°N 79.61°E | **91.58% ocean** |
 | **ETOPO 2022** | Driest | 6.57°S 25.24°E | **57.65% land** |
 
-*Results as of 2026-04-02 (3-level zoom refinement, 21,600 samples/circle)*
+*Results as of 2026-04-02 (commit 101fc96)*
 
 The wettest circle tilts through the Indian Ocean, western Pacific and Arctic — almost entirely open water. The driest circle threads through central Africa, Europe, central Asia and North America, before descending the length of South America almost along the spine of the Andes.
 
