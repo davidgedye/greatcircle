@@ -39,35 +39,41 @@ The grid must be sampled **uniformly in cos(θ)**, not uniformly in θ, to give 
 
 **Stage 1 — Coarse grid** (~32,400 circles at default grid=180)
 - 180×180 grid in (cos θ, φ)
-- 21,600 sample points per circle (matches ETOPO 1 arc-minute resolution)
+- 21,600 sample points per circle (one per ETOPO 1 arc-minute column — the natural match to the mask resolution)
 - Nearest-neighbour lookup via `scipy.ndimage.map_coordinates`
 - Parallelised across CPU cores with `ProcessPoolExecutor`
 
-**Stage 2 — Fine zoom**
-- Top 10 coarse candidates are each refined
-- ±2° window around each seed at 0.05° step size (80×80 grid per candidate)
-- Full search surface saved to `etopo.json` for visualisation
+**Stage 2 — Iterative zoom (3 levels)**
+
+Starting from the top 10 coarse candidates, three successive zoom passes are run, each 10× finer than the last, keeping the top 5 results between levels:
+
+| Level | Window | Step | Grid | Resolution |
+|-------|--------|------|------|------------|
+| 1 | ±2.0° | 0.05° | 80×80 | ~5.6 km |
+| 2 | ±0.2° | 0.005° | 80×80 | ~560 m |
+| 3 | ±0.02° | 0.0005° | 80×80 | ~55 m |
+
+Level-1 search surfaces are saved to `etopo.json` for the details-panel heatmap visualisation. At level 3 the step size (55 m) is well below the raster cell size (1.85 km), so convergence is confirmed when the top-5 results are identical between levels 2 and 3.
 
 ## Results
 
-| Dataset | | Pole location | Score |
+| Dataset | | Pole of great circle | Score |
 |---|---|---|---|
-| **ETOPO 2022** | Wettest | 24.14°N 79.58°E | **91.56% ocean** |
-| **ETOPO 2022** | Driest | 6.57°S 25.22°E | **57.69% land** |
+| **ETOPO 2022** | Wettest | 24.16°N 79.61°E | **91.58% ocean** |
+| **ETOPO 2022** | Driest | 6.57°S 25.24°E | **57.65% land** |
 
-*Results as of 2026-03-24 (commit a29c472)*
+*Results as of 2026-04-02 (3-level zoom refinement, 21,600 samples/circle)*
 
 The wettest circle tilts through the Indian Ocean, western Pacific and Arctic — almost entirely open water. The driest circle threads through central Africa, Europe, central Asia and North America, before descending the length of South America almost along the spine of the Andes.
 
 ## Uncertainty
 
-The fine best result has an estimated positional uncertainty of ~10 km from:
+The iterative zoom converges to a step size of 0.0005° (~55 m), well below the ETOPO raster cell size. Convergence is verified when zoom levels 2 and 3 return identical scores. The residual uncertainty is therefore dominated by the data, not the search:
 
-1. **Search grid resolution** — fine step 0.05°, results cluster within ~0.03° → ~3–5 km
-2. **Coastline accuracy** — ETOPO 1 arc-minute cells (~1.85 km) → ~1–2 km
-3. **Elevation threshold** — tidal flats can shift the effective coastline by 2–10 km
+1. **Coastline accuracy** — ETOPO 1 arc-minute cells (~1.85 km) → ~1–2 km per transition point
+2. **Elevation threshold** — tidal flats can shift the effective coastline by 2–10 km
 
-Combined (RSS): ~7 km, rounded to 10 km for display.
+Combined positional uncertainty: **~2–3 km**. The score uncertainty is smaller: with ~15–20 coastline crossings each uncertain by 1.85 km out of a 40,075 km total circumference, the score error is at most ~0.1 percentage points.
 
 ## Anomalies
 The ETOPO data set cannot perfectly separate land from water. What it can do is show the surface elevation in meters above or below mean sea level. Two problems arise: lakes and dry land below sea level.
@@ -121,7 +127,7 @@ python3 -m http.server 8000  # from repo root
 |------|---------|-------------|
 | `--workers N` | 1 | Parallel worker processes |
 | `--grid N` | 180 | Coarse grid size (N×N) |
-| `--pts N` | 3600 | Sample points per circle |
+| `--pts N` | 3600 | Sample points per circle (Makefile uses 21600) |
 | `--no-fine` | off | Skip fine zoom stage |
 
 ## Visualisation

@@ -8,6 +8,7 @@ all: etopo_visuals.json
 etopo.json: $(ETOPO) great_circles.py
 	python3 great_circles.py $(ETOPO) \
 	    --workers $(WORKERS) \
+	    --pts 21600 \
 	    --output $@
 
 # ── Visualisation ─────────────────────────────────────────────────────────────

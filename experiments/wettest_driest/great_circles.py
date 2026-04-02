@@ -437,7 +437,7 @@ def report(results: list[tuple[float, float, float]], label: str, top_n: int = 1
 
 def sanity_check(mask: np.ndarray, grid: dict):
     """Quick check: sample the ocean fraction along the equator."""
-    n = normal_to_cartesian(np.pi / 2, 0.0)  # theta=90°, phi=0° → equator
+    n = normal_to_cartesian(0.0, 0.0)  # theta=0° → normal is north pole → equator
     pts = great_circle_points(n)
     frac = sample_ocean_fraction(pts, mask, grid)
     print(f"\nSanity check — equator ocean fraction: {frac:.3f}")
@@ -504,10 +504,28 @@ def main():
     }
 
     if not args.no_fine:
-        top_wet = results[:args.top]
-        top_dry = results[-args.top:]
-        fine_wet, grids_wet = fine_search(mask, grid, top_wet, minimize=False, n_pts=args.pts, workers=args.workers)
-        fine_dry, grids_dry = fine_search(mask, grid, top_dry, minimize=True,  n_pts=args.pts, workers=args.workers)
+        # Three zoom levels, each 10× finer, keeping top 5 candidates between levels.
+        # Level-1 grids (2° window) are retained for the details-panel heatmap.
+        ZOOM_LEVELS = [(2.0, 0.05), (0.2, 0.005), (0.02, 0.0005)]
+        TOP_ZOOM = 5
+
+        wet_candidates = results[:args.top]
+        dry_candidates = list(reversed(results[-args.top:]))
+        grids_wet = grids_dry = None
+
+        for level, (window_deg, step_deg) in enumerate(ZOOM_LEVELS, 1):
+            print(f"\n--- Zoom level {level}: window=±{window_deg}°, step={step_deg}° ---")
+            fine_wet, g_wet = fine_search(mask, grid, wet_candidates,
+                                          window_deg=window_deg, step_deg=step_deg,
+                                          minimize=False, n_pts=args.pts, workers=args.workers)
+            fine_dry, g_dry = fine_search(mask, grid, dry_candidates,
+                                          window_deg=window_deg, step_deg=step_deg,
+                                          minimize=True,  n_pts=args.pts, workers=args.workers)
+            if level == 1:
+                grids_wet, grids_dry = g_wet, g_dry
+            wet_candidates = fine_wet[:TOP_ZOOM]
+            dry_candidates = fine_dry[:TOP_ZOOM]
+
         report(fine_wet, f"WETTEST GREAT CIRCLES — {wet_key} (fine)", top_n=5)
         report(fine_dry, f"DRIEST GREAT CIRCLES — {dry_key} (fine)", top_n=5)
         output[wet_key]["fine"] = grids_wet
