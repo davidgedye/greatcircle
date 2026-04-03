@@ -239,7 +239,7 @@ const DETAILS_URL = 'experiments/wettest_driest/etopo_details.json';
 const MASK_NLAT = 10800, MASK_NLON = 21600;
 const DISPLAY_PTS = 1080;
 const TRANSITION_PTS = 21600;
-const COARSE_TRANSITION_PTS = 3600;
+const COARSE_TRANSITION_PTS = 21600;
 const MAX_ANIM_CIRCLES = 13;
 
 const COLOR_OCEAN     = '#00bcd4';  // explorer/anim ocean segments
@@ -330,6 +330,7 @@ function onStateEnter(s, prev) {
     document.getElementById('card-explorer').classList.add('no-points');
     map.getCanvas().style.cursor = 'crosshair';
     map.easeTo({ zoom:animZoom(), pitch:0, bearing:0, duration:800, padding:getMapPadding() });
+    applyCoarseVisibility();
   }
   if (s === 'revealed') {
     if (prev === 'detailed') applyCoarseVisibility();
