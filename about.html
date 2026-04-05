@@ -60,9 +60,12 @@
     padding: 40px 24px 80px;
   }
   h1, h2, h3 { color: #eee; font-weight: bold; margin: 1.6em 0 0.5em; letter-spacing: 1px; }
-  h1 { font-size: 18px; letter-spacing: 2px; }
-  h2 { font-size: 15px; border-bottom: 1px solid #2a2a2a; padding-bottom: 6px; }
+  h1 { font-size: 18px; letter-spacing: 2px; text-transform: uppercase; }
+  h2 { font-size: 15px; border-bottom: 1px solid #2a2a2a; padding-bottom: 6px; text-transform: uppercase; }
   h3 { font-size: 13px; }
+  /* byline paragraph rendered from README: *by [David Gedye](...)* */
+  h1 + p { margin-top: -0.3em; margin-bottom: 1.2em; font-size: 12px; letter-spacing: 1px; }
+  h1 + p em { font-style: normal; }
   p { margin: 0.7em 0; }
   a { color: #00e5ff; text-decoration: none; }
   a:hover { text-decoration: underline; }
@@ -97,107 +100,148 @@
 <body>
 <div id="content">
   <a id="back" href="index.html">← Back to map</a>
-
-  <h1>WETTEST AND DRIEST GREAT CIRCLES ON EARTH</h1>
-  <p style="margin-top:-0.3em;margin-bottom:1.2em;font-size:12px;letter-spacing:1px">by <a href="https://www.linkedin.com/in/gedye/">David Gedye</a></p>
-
-  <p>A great circle is any full circumference of the Earth. If the center of a circle is the center of the Earth, you have a great circle. The equator is a great circle, and so is any circle that goes through both poles, but the circle can be tilted at any angle, and cross the equator at any two opposite points.</p>
-
-  <p>This project checks all possible great circles and finds the one that maximizes the ocean coverage (the "wettest") and the one that minimizes it (the "driest").</p>
-
-  <p>An interactive visualisation is hosted at <a href="https://davidgedye.github.io/greatcircle/"><strong>https://davidgedye.github.io/greatcircle/</strong></a>.</p>
-
-  <h2>BACKGROUND</h2>
-
-  <p><a href="https://arxiv.org/abs/1804.07389">Chabukswar &amp; Mukherjee (2018)</a> found the longest <em>uninterrupted</em> great-circle path over water (32,090 km, Pakistan → Kamchatka). That is a different objective: longest single segment, not maximum total fraction. This project addresses the total-fraction version, which does not appear to have been published.</p>
-
-  <h2>DATA</h2>
-
-  <p><strong>ETOPO 2022</strong> — 1 arc-minute (~1.85 km) global relief model, ice-surface elevation. Water defined as elevation ≤ 0 m.</p>
-
-  <table>
-    <tr><td>Source</td><td>NOAA</td></tr>
-    <tr><td>Resolution</td><td>1 arc-minute (~1.85 km)</td></tr>
-    <tr><td>Ice treatment</td><td>Ice-surface elevation</td></tr>
-    <tr><td>File</td><td><code>ETOPO_2022_v1_60s_N90W180_surface.nc</code></td></tr>
-    <tr><td>Size</td><td>~457 MB</td></tr>
-    <tr><td>Download</td><td><a href="https://www.ncei.noaa.gov/products/etopo-global-relief-model">ncei.noaa.gov</a></td></tr>
-  </table>
-
-  <h2>APPROACH</h2>
-
-  <h3>Parameterisation</h3>
-
-  <p>A great circle is uniquely identified by its plane's normal vector <strong>n</strong>, expressed in spherical coordinates as (θ, φ):</p>
-
-  <ul>
-    <li><strong>θ</strong> (colatitude): 0°–180° — measured from the North Pole, so θ = 90° − latitude</li>
-    <li><strong>φ</strong> (longitude): 0°–180° — antipodal symmetry halves the search space</li>
-  </ul>
-
-  <p>The grid must be sampled <strong>uniformly in cos(θ)</strong>, not uniformly in θ, to give equal solid-angle coverage. A naive linear grid in θ would oversample near the poles of normal-vector space.</p>
-
-  <h3>Two-stage search</h3>
-
-  <p><strong>Stage 1 — Coarse grid</strong> (~32,400 circles at default grid=180)</p>
-  <ul>
-    <li>180×180 grid in (cos θ, φ)</li>
-    <li>21,600 sample points per circle (one per ETOPO 1 arc-minute column — the natural match to the mask resolution)</li>
-    <li>Nearest-neighbour lookup via <code>scipy.ndimage.map_coordinates</code></li>
-    <li>Parallelised across CPU cores with <code>ProcessPoolExecutor</code></li>
-  </ul>
-
-  <p><strong>Stage 2 — Iterative zoom (3 levels)</strong></p>
-
-  <p>Starting from the top 10 coarse candidates, three successive zoom passes are run, each 10× finer than the last, keeping the top 5 results between levels:</p>
-
-  <table>
-    <tr><th>Level</th><th>Window</th><th>Step</th><th>Grid</th><th>Resolution</th></tr>
-    <tr><td>1</td><td>±2.0°</td><td>0.05°</td><td>80×80</td><td>~5.6 km</td></tr>
-    <tr><td>2</td><td>±0.2°</td><td>0.005°</td><td>80×80</td><td>~560 m</td></tr>
-    <tr><td>3</td><td>±0.02°</td><td>0.0005°</td><td>80×80</td><td>~55 m</td></tr>
-  </table>
-
-  <p>Level-1 search surfaces are saved to <code>etopo.json</code> for the details-panel heatmap visualisation. At level 3 the step size (55 m) is well below the raster cell size (1.85 km), so convergence is confirmed when the top-5 results are identical between levels 2 and 3.</p>
-
-  <h2>RESULTS</h2>
-
-  <table>
-    <tr><th>Dataset</th><th></th><th>Pole of great circle</th><th>Score</th></tr>
-    <tr><td><strong>ETOPO 2022</strong></td><td>Wettest</td><td>24.16°N 79.61°E</td><td><strong>91.58% ocean</strong></td></tr>
-    <tr><td><strong>ETOPO 2022</strong></td><td>Driest</td><td>6.57°S 25.24°E</td><td><strong>57.65% land</strong></td></tr>
-  </table>
-
-  <p><em>Results as of 2026-04-02 (commit 101fc96)</em></p>
-
-  <p>The wettest circle tilts through the Indian Ocean, western Pacific and Arctic — almost entirely open water. The driest circle threads through central Africa, Europe, central Asia and North America, before descending the length of South America almost along the spine of the Andes.</p>
-
-  <h2>UNCERTAINTY</h2>
-
-  <p>The iterative zoom converges to a step size of 0.0005° (~55 m), well below the ETOPO raster cell size. Convergence is verified when zoom levels 2 and 3 return identical scores. The residual uncertainty is therefore dominated by the data, not the search:</p>
-
-  <ol>
-    <li><strong>Coastline accuracy</strong> — ETOPO 1 arc-minute cells (~1.85 km) → ~1–2 km per transition point</li>
-    <li><strong>Elevation threshold</strong> — tidal flats can shift the effective coastline by 2–10 km</li>
-  </ol>
-
-  <p>Combined positional uncertainty: <strong>~2–3 km</strong>. The score uncertainty is smaller: with ~15–20 coastline crossings each uncertain by 1.85 km out of a 40,075 km total circumference, the score error is at most ~0.1 percentage points.</p>
-
-  <h2>ANOMALIES</h2>
-
-  <p>The ETOPO data set cannot perfectly separate land from water. What it can do is show the surface elevation in meters above or below mean sea level. Two problems arise: lakes and dry land below sea level.</p>
-
-  <ol>
-    <li><strong>Lakes</strong> — it's an open question as to whether you want to count lakes as water or non-ocean land, and for a while I had a more complex data pipeline that took a bathymetric data set (GEBCO) and either subtracted or added the areas of water that had an elevation &gt; 0. Unfortunately some lakes (e.g. Lake Superior, and Lake Baikal) have a surface that is above sea-level but a floor that is below.</li>
-    <li><strong>Dry Land Below Sea Level</strong> — The Dead Sea is well below sea level, and so shows as ocean on ETOPO. But so is most of the land around the Jordan river which flows into it. I know of no published data set that classifies the Jordan valley as land and the Dead Sea as water.</li>
-  </ol>
-
-  <p>In the end I decided to use ETOPO as it was, and so the separation between land and water is simply the elevation level of the surface, whether that surface is a lake bottom or a below-sea-level depression. My experimentation with tricky treatment of bathymetric data never made a change of more than 0.1% of any interesting great circle.</p>
-
-  <h2>REPOSITORY STRUCTURE</h2>
-
+<!-- CONTENT START -->
+<h1>Wettest and Driest Great Circles on Earth</h1>
+<p><em>by <a href="https://www.linkedin.com/in/gedye/">David Gedye</a></em></p>
+<p>A great circle is any full circumference of the Earth. If the center of a circle is the center of the Earth,  you have a great circle. The equator is a great circle, and so is any circle that goes through both poles, but the circle can be tilted at any angle, and cross the equator at any two opposite points.</p>
+<p>This project checks all possible great circles and finds the one that maximizes the ocean coverage (the "wettest") and the one that minimizes it (the "driest").</p>
+<p>An interactive visualisation is hosted at <strong>https://davidgedye.github.io/greatcircle/</strong>.</p>
+<h2>Background</h2>
+<p><a href="https://arxiv.org/abs/1804.07389">Chabukswar &amp; Mukherjee (2018)</a> found the longest <em>uninterrupted</em> great-circle path over water (32,090 km, Pakistan → Kamchatka). That is a different objective: longest single segment, not maximum total fraction. This project addresses the total-fraction version, which does not appear to have been published.</p>
+<h2>Data</h2>
+<p><strong>ETOPO 2022</strong> — 1 arc-minute (~1.85 km) global relief model, ice-surface elevation. Water defined as elevation ≤ 0 m.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source</td>
+<td>NOAA</td>
+</tr>
+<tr>
+<td>Resolution</td>
+<td>1 arc-minute (~1.85 km)</td>
+</tr>
+<tr>
+<td>Ice treatment</td>
+<td>Ice-surface elevation</td>
+</tr>
+<tr>
+<td>File</td>
+<td><code>ETOPO_2022_v1_60s_N90W180_surface.nc</code></td>
+</tr>
+<tr>
+<td>Size</td>
+<td>~457 MB</td>
+</tr>
+<tr>
+<td>Download</td>
+<td><a href="https://www.ncei.noaa.gov/products/etopo-global-relief-model">ncei.noaa.gov</a></td>
+</tr>
+</tbody>
+</table>
+<p>Place the data file under <code>data/</code> at the repo root (not committed — too large).</p>
+<h2>Approach</h2>
+<h3>Parameterisation</h3>
+<p>A great circle is uniquely identified by its plane's normal vector <strong>n</strong>, expressed in spherical coordinates as (θ, φ):</p>
+<ul>
+<li><strong>θ</strong> (colatitude): 0°–180° — measured from the North Pole, so θ = 90° − latitude</li>
+<li><strong>φ</strong> (longitude): 0°–180° — antipodal symmetry halves the search space</li>
+</ul>
+<p>The grid must be sampled <strong>uniformly in cos(θ)</strong>, not uniformly in θ, to give equal solid-angle coverage. A naive linear grid in θ would oversample near the poles of normal-vector space.</p>
+<h3>Two-stage search</h3>
+<p><strong>Stage 1 — Coarse grid</strong> (~32,400 circles at default grid=180)</p>
+<ul>
+<li>180×180 grid in (cos θ, φ)</li>
+<li>21,600 sample points per circle (one per ETOPO 1 arc-minute column — the natural match to the mask resolution)</li>
+<li>Nearest-neighbour lookup via <code>scipy.ndimage.map_coordinates</code></li>
+<li>Parallelised across CPU cores with <code>ProcessPoolExecutor</code></li>
+</ul>
+<p><strong>Stage 2 — Iterative zoom (3 levels)</strong></p>
+<p>Starting from the top 10 coarse candidates, three successive zoom passes are run, each 10× finer than the last, keeping the top 5 results between levels:</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Window</th>
+<th>Step</th>
+<th>Grid</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>±2.0°</td>
+<td>0.05°</td>
+<td>80×80</td>
+<td>~5.6 km</td>
+</tr>
+<tr>
+<td>2</td>
+<td>±0.2°</td>
+<td>0.005°</td>
+<td>80×80</td>
+<td>~560 m</td>
+</tr>
+<tr>
+<td>3</td>
+<td>±0.02°</td>
+<td>0.0005°</td>
+<td>80×80</td>
+<td>~55 m</td>
+</tr>
+</tbody>
+</table>
+<p>Level-1 search surfaces are saved to <code>etopo.json</code> for the details-panel heatmap visualisation. At level 3 the step size (55 m) is well below the raster cell size (1.85 km), so convergence is confirmed when the top-5 results are identical between levels 2 and 3.</p>
+<h2>Results</h2>
+<table>
+<thead>
+<tr>
+<th>Dataset</th>
+<th></th>
+<th>Pole of great circle</th>
+<th>Score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ETOPO 2022</strong></td>
+<td>Wettest</td>
+<td>24.16°N 79.61°E</td>
+<td><strong>91.58% ocean</strong></td>
+</tr>
+<tr>
+<td><strong>ETOPO 2022</strong></td>
+<td>Driest</td>
+<td>6.57°S 25.24°E</td>
+<td><strong>57.65% land</strong></td>
+</tr>
+</tbody>
+</table>
+<p><em>Results as of 2026-04-02 (commit 101fc96)</em></p>
+<p>The wettest circle tilts through the Indian Ocean, western Pacific and Arctic — almost entirely open water. The driest circle threads through central Africa, Europe, central Asia and North America, before descending the length of South America almost along the spine of the Andes.</p>
+<h2>Uncertainty</h2>
+<p>The iterative zoom converges to a step size of 0.0005° (~55 m), well below the ETOPO raster cell size. Convergence is verified when zoom levels 2 and 3 return identical scores. The residual uncertainty is therefore dominated by the data, not the search:</p>
+<ol>
+<li><strong>Coastline accuracy</strong> — ETOPO 1 arc-minute cells (~1.85 km) → ~1–2 km per transition point</li>
+<li><strong>Elevation threshold</strong> — tidal flats can shift the effective coastline by 2–10 km</li>
+</ol>
+<p>Combined positional uncertainty: <strong>~2–3 km</strong>. The score uncertainty is smaller: with ~15–20 coastline crossings each uncertain by 1.85 km out of a 40,075 km total circumference, the score error is at most ~0.1 percentage points.</p>
+<h2>Anomalies</h2>
+<p>The ETOPO data set cannot perfectly separate land from water. What it can do is show the surface elevation in meters above or below mean sea level. Two problems arise: lakes and dry land below sea level.</p>
+<ol>
+<li><strong>Lakes</strong> - it's an open question as to whether you want to count lakes as water or non-ocean land, and for a while I had a more complex data pipeline that took a bathymetric data set (GEBCO) and either subtracted or added the areas of water that had an elevation &gt; 0. Unfortunately some lakes (e.g. Lake Superior, and Lake Baikal) have a surface that is above sea-level but a floor that is below. </li>
+<li><strong>Dry Land Below Sea Level</strong> - The Dead Sea is well below sea level, and so shows as ocean on ETOPO. But so is most of the land around the Jordan river which flows into it. I know of no published data set that classifies the Jordan valley as land and the Dead Sea as water.</li>
+</ol>
+<p>In the end I decided to use ETOPO as it was, and so the separation between land and water is simply the elevation level of the surface, whether that surface is a lake bottom or a below-sea-level depression. My experimentation with tricky treatment of bathymetric data never made a change of more that 0.1% of any interesting great circle.</p>
+<h2>Repository structure</h2>
 <pre><code>index.html                          Web visualisation (GitHub Pages root)
-about.html                          About page (linked from map)
+about.html                          About page (linked from map, generated by build_about.py)
 mask_60s.bin.gz                     1 arc-minute land/ocean mask (binary, gzip-compressed)
 sw.js                               Service worker (offline cache)
 manifest.json                       PWA manifest
@@ -210,13 +254,11 @@ experiments/
     etopo_visuals.json              Map data (initial load)
     etopo_details.json              Detail data (lazy-loaded)
 data/
-  ETOPO_2022_v1_60s_N90W180_surface.nc  Not in repo (~457 MB)</code></pre>
-
-  <h2>USAGE</h2>
-
-  <p>All commands run from <code>experiments/wettest_driest/</code>.</p>
-
-<pre><code>pip install netCDF4 scipy numpy
+  ETOPO_2022_v1_60s_N90W180_surface.nc  Not in repo (~457 MB)
+</code></pre>
+<h2>Usage</h2>
+<p>All commands run from <code>experiments/wettest_driest/</code>.</p>
+<pre><code class="language-bash">pip install netCDF4 scipy numpy
 
 # Full pipeline (search → web JSON)
 make
@@ -227,34 +269,111 @@ python3 visualize.py
 
 # Serve locally
 python3 -m http.server 8000  # from repo root
-# Open http://localhost:8000/</code></pre>
-
-  <h3>Key options for <code>great_circles.py</code></h3>
-
-  <table>
-    <tr><th>Flag</th><th>Default</th><th>Description</th></tr>
-    <tr><td><code>--workers N</code></td><td>1</td><td>Parallel worker processes</td></tr>
-    <tr><td><code>--grid N</code></td><td>180</td><td>Coarse grid size (N×N)</td></tr>
-    <tr><td><code>--pts N</code></td><td>3600</td><td>Sample points per circle (Makefile uses 21600)</td></tr>
-    <tr><td><code>--no-fine</code></td><td>off</td><td>Skip fine zoom stage</td></tr>
-  </table>
-
-  <h2>VISUALISATION</h2>
-
-  <p>The web page (<code>index.html</code>) is a guided experience with five states:</p>
-
-  <ol>
-    <li><strong>Intro</strong> — the globe spins and random great circles accumulate, each coloured by land (red) and ocean (blue).</li>
-    <li><strong>Examine</strong> — click a circle to highlight it and see its land/ocean percentage.</li>
-    <li><strong>Explorer</strong> — place two points on the globe to define a great circle; the land/ocean split updates live as you drag. After two circles the wettest and driest you have found are tracked.</li>
-    <li><strong>Revealed</strong> — an animation of 100 sampled great circles sweeps the globe, then fades to reveal the computed absolute wettest and driest circles.</li>
-    <li><strong>Detailed</strong> — a Details panel (desktop only) expands below the results showing fine-search heatmaps and coarse top-10 candidates.</li>
-  </ol>
-
-  <h2>KNOWN ISSUES</h2>
-
-  <p><strong>Line rendering artefacts near the poles (Mapbox GL JS bug).</strong> When the globe is oriented to show either pole, lines passing near a pole may render with banded fuzziness at certain zoom levels. This is a known, unresolved bug in Mapbox GL JS globe projection (<a href="https://github.com/mapbox/mapbox-gl-js/issues/12026">issue #12026</a>, open since June 2022). No workaround is available within the current Mapbox API.</p>
-
+# Open http://localhost:8000/
+</code></pre>
+<h3>Key options for <code>great_circles.py</code></h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--workers N</code></td>
+<td>1</td>
+<td>Parallel worker processes</td>
+</tr>
+<tr>
+<td><code>--grid N</code></td>
+<td>180</td>
+<td>Coarse grid size (N×N)</td>
+</tr>
+<tr>
+<td><code>--pts N</code></td>
+<td>3600</td>
+<td>Sample points per circle (Makefile uses 21600)</td>
+</tr>
+<tr>
+<td><code>--no-fine</code></td>
+<td>off</td>
+<td>Skip fine zoom stage</td>
+</tr>
+</tbody>
+</table>
+<h2>Visualisation</h2>
+<p>The web page (<code>index.html</code>) is a guided experience with five states:</p>
+<ol>
+<li><strong>Intro</strong> — the globe spins and random great circles accumulate, each coloured by land (red) and ocean (blue).</li>
+<li><strong>Examine</strong> — click a circle to highlight it and see its land/ocean percentage. A button invites you to try your own.</li>
+<li><strong>Explorer</strong> — place two points on the globe to define a great circle; the land/ocean split updates live as you drag the points. After two circles the wettest and driest you have found are tracked. A Reveal button appears once data is ready.</li>
+<li><strong>Revealed</strong> — an animation of 100 sampled great circles sweeps the globe, then fades to reveal the computed absolute wettest and driest circles.</li>
+<li><strong>Detailed</strong> — a Details panel (desktop only) expands below the results showing fine-search heatmaps and coarse top-10 candidates.</li>
+</ol>
+<p><strong>Map features:</strong>
+- Globe projection with atmosphere and fog
+- Fine best great circles shown in Revealed/Detailed; coarse top-10 toggleable in Details
+- Lines grow in width with zoom; fine best lines represent the ~10 km positional uncertainty band</p>
+<p><strong>Fine search heatmaps</strong> (Details panel, desktop only):
+- Show the optimisation landscape across the ±2° fine search window
+- Click a cell to draw that great circle on the map
+- Click on the map near a winning line to highlight the corresponding heatmap cell</p>
+<p><strong>Great circle pole markers:</strong>
+- <code>+</code> symbols mark both poles of each winning circle's axis</p>
+<p><strong>Mobile layout:</strong>
+- Card appears below the globe showing contextual text for each state
+- Details panel and heatmaps require a larger screen</p>
+<h2>App state navigation</h2>
+<p>The app progresses forward through states and can step back with the ←Previous link (top-left, below the logo).</p>
+<pre><code>loading → intro → examine → explorer → revealed ↔ detailed
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>From</th>
+<th>Forward</th>
+<th>Back (←Previous)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>loading</code></td>
+<td>→ <code>intro</code> (automatic, when mask loads)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>intro</code></td>
+<td>→ <code>examine</code> (click or drag on globe)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>examine</code></td>
+<td>→ <code>explorer</code> (Make your own button)</td>
+<td>→ <code>intro</code></td>
+</tr>
+<tr>
+<td><code>explorer</code></td>
+<td>→ <code>revealed</code> (Absolute Wettest and Driest button)</td>
+<td>→ <code>intro</code></td>
+</tr>
+<tr>
+<td><code>revealed</code></td>
+<td>→ <code>detailed</code> (Details button)</td>
+<td>→ <code>explorer</code></td>
+</tr>
+<tr>
+<td><code>detailed</code></td>
+<td>→ <code>revealed</code> (Hide Details button)</td>
+<td>→ <code>explorer</code></td>
+</tr>
+</tbody>
+</table>
+<p>The logo always returns to <code>intro</code> from any state. The <code>detailed</code> state is a panel overlay on top of <code>revealed</code>; the Details/Hide Details button toggles between them without back-navigation semantics.</p>
+<h2>Known issues</h2>
+<p><strong>Line rendering artefacts near the poles (Mapbox GL JS bug).</strong> When the globe is oriented to show either pole, lines passing near a pole may render with banded fuzziness at certain zoom levels, or as a large partial arc rather than a tight curve. This is a known, unresolved bug in Mapbox GL JS globe projection (<a href="https://github.com/mapbox/mapbox-gl-js/issues/12026">issue #12026</a>, open since June 2022). The root cause is that the renderer draws line segments as straight lines in projected tile space, which breaks down at extreme latitudes. No workaround is available within the current Mapbox API; the code passes correct densely-sampled GeoJSON and will render properly if/when Mapbox fixes the underlying issue.</p>
+<!-- CONTENT END -->
 </div>
 </body>
 </html>
