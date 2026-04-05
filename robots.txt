@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://davidgedye.github.io/greatcircle/sitemap.xml
