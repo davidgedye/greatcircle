@@ -1231,7 +1231,7 @@ function prevState(s) {
   if (s === 'examine')  return 'intro';
   return null;
 }
-document.getElementById('logo-panel').addEventListener('click', e => { if(appState!=='loading') enterState('intro'); });
+document.getElementById('logo-panel').addEventListener('click', e => { window.open('about.html', '_blank'); });
 document.getElementById('prev-btn').addEventListener('click', e => {
   e.stopPropagation();  // don't also fire logo-panel click
   const p = prevState(appState);
