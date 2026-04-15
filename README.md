@@ -5,7 +5,7 @@ A great circle is any full circumference of the Earth. If the center of a circle
 
 This project checks all possible great circles and finds the one that maximizes the ocean coverage (the "wettest") and the one that minimizes it (the "driest").
 
-An interactive visualisation is hosted at **https://davidgedye.github.io/greatcircle/**.
+An interactive visualisation is hosted at **https://greatcircles.gedye.com/**.
 
 ## Background
 
